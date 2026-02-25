@@ -6,6 +6,9 @@ internal sealed record CliOptions(
     string? OutputFolderOverride,
     bool SkipDuplicateRequested,
     bool VerboseBuildOutput,
+    bool Force,
+    bool AutoBump,
+    string BumpLevel,
     bool WhatIf,
     bool Yes,
     IReadOnlyList<string> IncludeGlobs,
@@ -36,6 +39,9 @@ internal sealed record CliOptions(
         string? output = null;
         var skipDuplicate = false;
         var verboseBuildOutput = false;
+        var force = false;
+        var autoBump = false;
+        var bumpLevel = "patch";
         var whatIf = false;
         var yes = false;
         var includes = new List<string>();
@@ -89,6 +95,25 @@ internal sealed record CliOptions(
                 case "-verbose-build":
                     verboseBuildOutput = true;
                     break;
+                case "-force":
+                    force = true;
+                    break;
+                case "-auto-bump":
+                    autoBump = true;
+                    break;
+                case "-bump-level":
+                    i++;
+                    if (i >= args.Length)
+                    {
+                        return ParseResult.Fail("-bump-level requires a value.");
+                    }
+
+                    bumpLevel = args[i].Trim().ToLowerInvariant();
+                    if (bumpLevel is not ("patch" or "minor" or "major"))
+                    {
+                        return ParseResult.Fail("-bump-level must be patch, minor, or major.");
+                    }
+                    break;
                 case "-whatif":
                     whatIf = true;
                     break;
@@ -126,6 +151,9 @@ internal sealed record CliOptions(
             OutputFolderOverride: output,
             SkipDuplicateRequested: skipDuplicate,
             VerboseBuildOutput: verboseBuildOutput,
+            Force: force,
+            AutoBump: autoBump,
+            BumpLevel: bumpLevel,
             WhatIf: whatIf,
             Yes: yes,
             IncludeGlobs: includes,

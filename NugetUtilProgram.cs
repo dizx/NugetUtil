@@ -32,6 +32,100 @@ internal static class NugetUtilProgram
 
             var allProjects = discovery.Projects!;
             var packageProjects = allProjects.Values.Where(p => p.IsPackage).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (packageProjects.Count == 0)
+            {
+                Console.WriteLine("No package projects found.");
+                return ExitCodes.Success;
+            }
+
+            HashSet<string>? selectedPackagePathSet = null;
+            if (options.AutoBump)
+            {
+                var autoBumpResult = AutoBumpService.Apply(
+                    rootPath: options.RootPath,
+                    allProjects: allProjects,
+                    packageProjects: packageProjects,
+                    bumpLevel: options.BumpLevel,
+                    whatIf: options.WhatIf);
+
+                if (!autoBumpResult.Success)
+                {
+                    Console.Error.WriteLine(autoBumpResult.Error);
+                    return ExitCodes.InvalidArgsOrConfig;
+                }
+
+                var bumped = autoBumpResult.BumpedVersions!;
+                if (bumped.Count == 0)
+                {
+                    Console.WriteLine("No package updates detected.");
+                    return ExitCodes.Success;
+                }
+
+                Console.WriteLine("Auto bump packages:");
+                foreach (var package in packageProjects.Where(p => bumped.ContainsKey(p.Path)).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"- {package.PackageId}: {package.Version} -> {bumped[package.Path]}");
+                }
+
+                selectedPackagePathSet = bumped.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (!options.WhatIf)
+                {
+                    var refreshedDiscovery = ProjectDiscovery.Discover(options, config);
+                    if (!refreshedDiscovery.Success)
+                    {
+                        Console.Error.WriteLine(refreshedDiscovery.Error);
+                        return ExitCodes.InvalidArgsOrConfig;
+                    }
+
+                    allProjects = refreshedDiscovery.Projects!;
+                    packageProjects = allProjects.Values.Where(p => p.IsPackage).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase).ToList();
+                }
+                else
+                {
+                    allProjects = allProjects.ToDictionary(
+                        kv => kv.Key,
+                        kv => bumped.TryGetValue(kv.Key, out var newVersion)
+                            ? kv.Value with { Version = newVersion }
+                            : kv.Value,
+                        StringComparer.OrdinalIgnoreCase);
+
+                    packageProjects = allProjects.Values.Where(p => p.IsPackage).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase).ToList();
+                }
+            }
+            else
+            {
+                if (options.Force)
+                {
+                    selectedPackagePathSet = packageProjects.Select(p => p.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    Console.WriteLine("Force mode enabled: processing all discovered packages.");
+                }
+                else
+                {
+                    var changedPackagesResult = AutoBumpService.DetectChangedPackages(options.RootPath, allProjects, packageProjects);
+                    if (!changedPackagesResult.Success)
+                    {
+                        Console.Error.WriteLine(changedPackagesResult.Error);
+                        return ExitCodes.InvalidArgsOrConfig;
+                    }
+
+                    var changedPaths = changedPackagesResult.PackagePaths!;
+                    if (changedPaths.Count == 0)
+                    {
+                        Console.WriteLine("No package updates detected.");
+                        return ExitCodes.Success;
+                    }
+
+                    selectedPackagePathSet = changedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    Console.WriteLine("Changed packages:");
+                    foreach (var package in packageProjects.Where(p => selectedPackagePathSet.Contains(p.Path)).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"- {package.PackageId} ({package.Version})");
+                    }
+                }
+            }
+
             var latestPackageVersions = packageProjects
                 .GroupBy(p => p.PackageId, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
@@ -39,10 +133,12 @@ internal static class NugetUtilProgram
                     g => g.Select(p => p.Version).OrderByDescending(v => v, NugetVersionComparer.Instance).First(),
                     StringComparer.OrdinalIgnoreCase);
 
-            if (packageProjects.Count == 0)
+            if (selectedPackagePathSet is not null)
             {
-                Console.WriteLine("No package projects found.");
-                return ExitCodes.Success;
+                packageProjects = packageProjects
+                    .Where(p => selectedPackagePathSet.Contains(p.Path))
+                    .OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
 
             Console.WriteLine("Discovered packages:");
@@ -159,6 +255,16 @@ internal static class NugetUtilProgram
 
             if (!options.Push)
             {
+                if (!options.WhatIf)
+                {
+                    var stateUpdateResult = AutoBumpService.SaveState(options.RootPath, allProjects, allProjects.Values.Where(p => p.IsPackage).ToList());
+                    if (!stateUpdateResult.Success)
+                    {
+                        Console.Error.WriteLine(stateUpdateResult.Error);
+                        return ExitCodes.InvalidArgsOrConfig;
+                    }
+                }
+
                 return ExitCodes.Success;
             }
 
@@ -227,6 +333,16 @@ internal static class NugetUtilProgram
                 }
             }
 
+            if (!options.WhatIf)
+            {
+                var stateUpdateResult = AutoBumpService.SaveState(options.RootPath, allProjects, allProjects.Values.Where(p => p.IsPackage).ToList());
+                if (!stateUpdateResult.Success)
+                {
+                    Console.Error.WriteLine(stateUpdateResult.Error);
+                    return ExitCodes.InvalidArgsOrConfig;
+                }
+            }
+
             return ExitCodes.Success;
         }
         catch (Exception ex)
@@ -242,11 +358,14 @@ internal static class NugetUtilProgram
         Console.WriteLine("  <path> = repository root path containing .csproj files");
         Console.WriteLine("Options:");
         Console.WriteLine("  -push");
-        Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");
+        Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"PeritusPackages\")");
         Console.WriteLine("  -configuration Release|Debug");
         Console.WriteLine("  -output \"<folder>\"");
         Console.WriteLine("  -skip-duplicate");
         Console.WriteLine("  -verbose-build");
+        Console.WriteLine("  -force");
+        Console.WriteLine("  -auto-bump");
+        Console.WriteLine("  -bump-level patch|minor|major");
         Console.WriteLine("  -whatif");
         Console.WriteLine("  -yes");
         Console.WriteLine("  -include \"<glob>\" (repeatable)");

@@ -13,6 +13,8 @@ Given a repo root, NugetUtil will:
 5. Pack with `dotnet pack` (from nuspec)
 6. Optionally push with `dotnet nuget push`
 
+By default, NugetUtil computes filesystem fingerprints and only regenerates/packs packages that changed.
+
 Nuspec mode is the default behavior and is required when a package project directly references non-packable projects.
 
 ## Requirements
@@ -33,6 +35,10 @@ nugetutil "C:\Dev\myproject" -push
 
 ```bash
 nugetutil "C:\Dev\myproject" -push -source "PeritusPackages"
+```
+
+```bash
+nugetutil "C:\Dev\myproject" -auto-bump -bump-level patch
 ```
 
 ## Parameters
@@ -63,6 +69,18 @@ nugetutil "C:\Dev\myproject" -push -source "PeritusPackages"
   - Prints full `dotnet build` output for each package.
   - Default: concise build output (`- Build: succeeded` or build errors).
 
+- `-force`
+  - Processes all discovered packages, ignoring fingerprint change detection.
+  - Useful when you want to regenerate/repack everything.
+
+- `-auto-bump`
+  - Uses filesystem fingerprints to detect which packages need a version bump.
+  - Bumps changed packages and dependent packages, then packs only bumped packages.
+
+- `-bump-level patch|minor|major`
+  - Version bump level used with `-auto-bump`.
+  - Default: `patch`.
+
 - `-whatif`
   - Dry-run mode. Commands are printed but not executed.
 
@@ -82,6 +100,12 @@ nugetutil "C:\Dev\myproject" -push -source "PeritusPackages"
 Location:
 
 - `%APPDATA%\NugetUtil\config.json`
+
+Auto-bump state file:
+
+- `%APPDATA%\NugetUtil\state.json`
+
+State is used for both default changed-package detection and `-auto-bump`.
 
 On first run, if missing, NugetUtil creates a starter config automatically.
 
@@ -121,6 +145,14 @@ Notes:
 - Resolves `$(PropertyName)` versions from project properties and `Directory.Build.props` up the directory tree.
 - For internal package dependencies discovered in the same run, NugetUtil uses the latest discovered package version.
 - Embeds non-packable referenced project outputs into `lib\<packageTfm>` via `<files>` entries.
+
+## Auto bump behavior
+
+- Tracks package input fingerprints in `%APPDATA%\NugetUtil\state.json`.
+- Detects changes from filesystem content (no git integration required).
+- Marks changed packages for bump.
+- Propagates bumps to dependent packages.
+- Updates `<Version>` in `.csproj`, regenerates nuspec, and packs bumped packages.
 
 ## Exit codes
 
