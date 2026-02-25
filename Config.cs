@@ -57,10 +57,6 @@ internal static class ConfigLoader
         {
             DefaultSource = string.IsNullOrWhiteSpace(user.DefaultSource) ? defaults.DefaultSource : user.DefaultSource,
             Sources = user.Sources.Count == 0 ? defaults.Sources : new Dictionary<string, SourceConfig>(user.Sources, StringComparer.OrdinalIgnoreCase),
-            Paths = new PathsConfig
-            {
-                NugetExe = string.IsNullOrWhiteSpace(user.Paths.NugetExe) ? defaults.Paths.NugetExe : user.Paths.NugetExe
-            },
             Behavior = new BehaviorConfig
             {
                 SkipDuplicate = user.Behavior.SkipDuplicate ?? defaults.Behavior.SkipDuplicate,
@@ -89,13 +85,8 @@ internal static class ConfigLoader
                 {
                     ["MyFeed"] = new
                     {
-                        url = "https://example.invalid/nuget/v3/index.json",
                         apiKey = "REPLACE_ME"
                     }
-                },
-                paths = new
-                {
-                    nugetExe = "C:\\Tools\\nuget.exe"
                 },
                 behavior = new
                 {
@@ -132,19 +123,12 @@ internal sealed class NugetUtilConfig
 {
     public string? DefaultSource { get; init; }
     public Dictionary<string, SourceConfig> Sources { get; init; } = new(StringComparer.OrdinalIgnoreCase);
-    public PathsConfig Paths { get; init; } = new();
     public BehaviorConfig Behavior { get; init; } = new();
 }
 
 internal sealed class SourceConfig
 {
-    public string Url { get; init; } = string.Empty;
     public string ApiKey { get; init; } = string.Empty;
-}
-
-internal sealed class PathsConfig
-{
-    public string? NugetExe { get; init; }
 }
 
 internal sealed class BehaviorConfig

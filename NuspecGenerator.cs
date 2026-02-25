@@ -157,11 +157,11 @@ internal static class NuspecGenerator
             var files = new XElement(ns + "files");
 
             var packageFile = new XElement(ns + "file",
-                new XAttribute("src", $"{package.ProjectName}\\bin\\{configuration}\\{package.TargetFramework}\\{package.ProjectName}.*"),
+                new XAttribute("src", $"bin\\{configuration}\\{package.TargetFramework}\\{package.ProjectName}.*"),
                 new XAttribute("target", $"lib\\{package.TargetFramework}"));
 
             var packageExcludes = directNonPackableReferences
-                .Select(r => $"{package.ProjectName}\\bin\\{configuration}\\{package.TargetFramework}\\{r.ProjectName}.*")
+                .Select(r => $"bin\\{configuration}\\{package.TargetFramework}\\{r.ProjectName}.*")
                 .ToList();
 
             if (packageExcludes.Count > 0)
@@ -173,8 +173,15 @@ internal static class NuspecGenerator
 
             foreach (var referenced in directNonPackableReferences.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
             {
+                var packageDir = Path.GetDirectoryName(package.Path)!;
+                var referencedDir = Path.GetDirectoryName(referenced.Path)!;
+                var relativeRefDir = Path.GetRelativePath(packageDir, referencedDir).Replace('/', '\\');
+                var relativeOutputPath = relativeRefDir == "."
+                    ? $"bin\\{configuration}\\{referenced.TargetFramework}\\{referenced.ProjectName}.*"
+                    : $"{relativeRefDir}\\bin\\{configuration}\\{referenced.TargetFramework}\\{referenced.ProjectName}.*";
+
                 files.Add(new XElement(ns + "file",
-                    new XAttribute("src", $"{referenced.ProjectName}\\bin\\{configuration}\\{referenced.TargetFramework}\\{referenced.ProjectName}.*"),
+                    new XAttribute("src", relativeOutputPath),
                     new XAttribute("target", $"lib\\{packageTfm}")));
             }
 

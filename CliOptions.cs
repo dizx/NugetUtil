@@ -5,6 +5,7 @@ internal sealed record CliOptions(
     string Configuration,
     string? OutputFolderOverride,
     bool SkipDuplicateRequested,
+    bool VerboseBuildOutput,
     bool WhatIf,
     bool Yes,
     IReadOnlyList<string> IncludeGlobs,
@@ -34,6 +35,7 @@ internal sealed record CliOptions(
         var configuration = "Release";
         string? output = null;
         var skipDuplicate = false;
+        var verboseBuildOutput = false;
         var whatIf = false;
         var yes = false;
         var includes = new List<string>();
@@ -84,6 +86,9 @@ internal sealed record CliOptions(
                 case "-skip-duplicate":
                     skipDuplicate = true;
                     break;
+                case "-verbose-build":
+                    verboseBuildOutput = true;
+                    break;
                 case "-whatif":
                     whatIf = true;
                     break;
@@ -120,6 +125,7 @@ internal sealed record CliOptions(
             Configuration: configuration,
             OutputFolderOverride: output,
             SkipDuplicateRequested: skipDuplicate,
+            VerboseBuildOutput: verboseBuildOutput,
             WhatIf: whatIf,
             Yes: yes,
             IncludeGlobs: includes,

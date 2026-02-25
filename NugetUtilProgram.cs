@@ -62,7 +62,6 @@ internal static class NugetUtilProgram
 
             Directory.CreateDirectory(outputFolder);
 
-            var nugetExe = string.IsNullOrWhiteSpace(config.Paths.NugetExe) ? "nuget.exe" : config.Paths.NugetExe;
             var createdPackages = new List<string>();
 
             foreach (var package in packageProjects)
@@ -93,11 +92,17 @@ internal static class NugetUtilProgram
                     arguments: ["build", package.Path, "-c", options.Configuration],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
-                    sensitiveValues: []);
+                    sensitiveValues: [],
+                    printOutputOnSuccess: options.VerboseBuildOutput);
 
                 if (!buildResult.Success)
                 {
                     return ExitCodes.BuildFailed;
+                }
+
+                if (!options.VerboseBuildOutput)
+                {
+                    Console.WriteLine("- Build: succeeded");
                 }
 
                 var dependencyResult = NuspecGenerator.BuildDependencies(package, allProjects, latestPackageVersions);
@@ -124,15 +129,13 @@ internal static class NugetUtilProgram
                 Console.WriteLine($"- Nuspec: {nuspecPath}");
 
                 var packResult = await ProcessRunner.RunAsync(
-                    fileName: nugetExe,
+                    fileName: "dotnet",
                     arguments:
                     [
                         "pack",
                         nuspecPath,
-                        "-OutputDirectory",
-                        outputFolder,
-                        "-BasePath",
-                        options.RootPath
+                        "-o",
+                        outputFolder
                     ],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
@@ -172,14 +175,14 @@ internal static class NugetUtilProgram
                 return ExitCodes.InvalidArgsOrConfig;
             }
 
-            if (string.IsNullOrWhiteSpace(sourceConfig.Url) || string.IsNullOrWhiteSpace(sourceConfig.ApiKey))
+            if (string.IsNullOrWhiteSpace(sourceConfig.ApiKey))
             {
-                Console.Error.WriteLine($"Source '{sourceName}' must define url and apiKey.");
+                Console.Error.WriteLine($"Source '{sourceName}' must define apiKey.");
                 return ExitCodes.InvalidArgsOrConfig;
             }
 
             Console.WriteLine();
-            Console.WriteLine($"Push destination: {sourceConfig.Url}");
+            Console.WriteLine($"Push source: {sourceName}");
 
             if (!options.Yes && !options.WhatIf)
             {
@@ -199,21 +202,21 @@ internal static class NugetUtilProgram
                 {
                     "push",
                     nupkg,
-                    "-Source",
-                    sourceConfig.Url,
-                    "-ApiKey",
+                    "--source",
+                    sourceName,
+                    "--api-key",
                     sourceConfig.ApiKey,
-                    "-NonInteractive"
+                    "--interactive"
                 };
 
                 if (effectiveSkipDuplicate)
                 {
-                    pushArgs.Add("-SkipDuplicate");
+                    pushArgs.Add("--skip-duplicate");
                 }
 
                 var pushResult = await ProcessRunner.RunAsync(
-                    fileName: nugetExe,
-                    arguments: pushArgs,
+                    fileName: "dotnet",
+                    arguments: ["nuget", .. pushArgs],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
                     sensitiveValues: [sourceConfig.ApiKey]);
@@ -235,13 +238,15 @@ internal static class NugetUtilProgram
 
     private static void PrintUsage()
     {
-        Console.WriteLine("Usage: nugetutil \"<rootPath>\" [options]");
+        Console.WriteLine("Usage: nugetutil \"<path>\" [options]");
+        Console.WriteLine("  <path> = repository root path containing .csproj files");
         Console.WriteLine("Options:");
         Console.WriteLine("  -push");
-        Console.WriteLine("  -source \"<name>\"");
+        Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");
         Console.WriteLine("  -configuration Release|Debug");
         Console.WriteLine("  -output \"<folder>\"");
         Console.WriteLine("  -skip-duplicate");
+        Console.WriteLine("  -verbose-build");
         Console.WriteLine("  -whatif");
         Console.WriteLine("  -yes");
         Console.WriteLine("  -include \"<glob>\" (repeatable)");

@@ -7,7 +7,8 @@ internal static class ProcessRunner
         IReadOnlyList<string> arguments,
         string workingDirectory,
         bool whatIf,
-        IReadOnlyList<string> sensitiveValues)
+        IReadOnlyList<string> sensitiveValues,
+        bool printOutputOnSuccess = true)
     {
         var commandForLog = BuildCommandForLog(fileName, arguments, sensitiveValues);
         Console.WriteLine($"> {commandForLog}");
@@ -39,6 +40,24 @@ internal static class ProcessRunner
         var stdErr = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
 
+        if (process.ExitCode == 0)
+        {
+            if (printOutputOnSuccess)
+            {
+                if (!string.IsNullOrWhiteSpace(stdOut))
+                {
+                    Console.Write(MaskSensitive(stdOut, sensitiveValues));
+                }
+
+                if (!string.IsNullOrWhiteSpace(stdErr))
+                {
+                    Console.Error.Write(MaskSensitive(stdErr, sensitiveValues));
+                }
+            }
+
+            return ProcessResult.Ok();
+        }
+
         if (!string.IsNullOrWhiteSpace(stdOut))
         {
             Console.Write(MaskSensitive(stdOut, sensitiveValues));
@@ -49,9 +68,7 @@ internal static class ProcessRunner
             Console.Error.Write(MaskSensitive(stdErr, sensitiveValues));
         }
 
-        return process.ExitCode == 0
-            ? ProcessResult.Ok()
-            : ProcessResult.Fail($"Command failed with exit code {process.ExitCode}: {fileName}");
+        return ProcessResult.Fail($"Command failed with exit code {process.ExitCode}: {fileName}");
     }
 
     private static string BuildCommandForLog(string fileName, IReadOnlyList<string> args, IReadOnlyList<string> sensitiveValues)
