@@ -1,0 +1,83 @@
+using System.Diagnostics;
+
+internal static class ProcessRunner
+{
+    public static async Task<ProcessResult> RunAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string workingDirectory,
+        bool whatIf,
+        IReadOnlyList<string> sensitiveValues)
+    {
+        var commandForLog = BuildCommandForLog(fileName, arguments, sensitiveValues);
+        Console.WriteLine($"> {commandForLog}");
+
+        if (whatIf)
+        {
+            return ProcessResult.Ok();
+        }
+
+        var processStartInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var arg in arguments)
+        {
+            processStartInfo.ArgumentList.Add(arg);
+        }
+
+        using var process = new Process { StartInfo = processStartInfo };
+        process.Start();
+
+        var stdOut = await process.StandardOutput.ReadToEndAsync();
+        var stdErr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        if (!string.IsNullOrWhiteSpace(stdOut))
+        {
+            Console.Write(MaskSensitive(stdOut, sensitiveValues));
+        }
+
+        if (!string.IsNullOrWhiteSpace(stdErr))
+        {
+            Console.Error.Write(MaskSensitive(stdErr, sensitiveValues));
+        }
+
+        return process.ExitCode == 0
+            ? ProcessResult.Ok()
+            : ProcessResult.Fail($"Command failed with exit code {process.ExitCode}: {fileName}");
+    }
+
+    private static string BuildCommandForLog(string fileName, IReadOnlyList<string> args, IReadOnlyList<string> sensitiveValues)
+    {
+        var command = fileName + " " + string.Join(" ", args.Select(QuoteArgForLog));
+        return MaskSensitive(command, sensitiveValues);
+    }
+
+    private static string QuoteArgForLog(string arg)
+    {
+        if (arg.Contains(' ') || arg.Contains('"'))
+        {
+            return "\"" + arg.Replace("\"", "\\\"") + "\"";
+        }
+
+        return arg;
+    }
+
+    private static string MaskSensitive(string text, IReadOnlyList<string> sensitiveValues)
+    {
+        var value = text;
+        foreach (var secret in sensitiveValues.Where(s => !string.IsNullOrWhiteSpace(s)))
+        {
+            value = value.Replace(secret, "***", StringComparison.Ordinal);
+        }
+
+        return value;
+    }
+}
