@@ -5,7 +5,11 @@ internal static class Program
         try
         {
             var exitCode = await NugetUtilProgram.RunAsync(args);
-            PrintExitMessage(exitCode);
+            if (!IsUsageInvocation(args))
+            {
+                PrintExitMessage(exitCode);
+            }
+
             return exitCode;
         }
         catch (Exception ex)
@@ -13,6 +17,14 @@ internal static class Program
             Console.Error.WriteLine(ex.Message);
             return ExitCodes.InvalidArgsOrConfig;
         }
+    }
+
+    private static bool IsUsageInvocation(string[] args)
+    {
+        return args.Length == 0 ||
+               args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void PrintExitMessage(int exitCode)

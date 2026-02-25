@@ -34,11 +34,15 @@ nugetutil "C:\Dev\myproject" -push
 ```
 
 ```bash
-nugetutil "C:\Dev\myproject" -push -source "PeritusPackages"
+nugetutil "C:\Dev\myproject" -push -source "MyFeed"
 ```
 
 ```bash
 nugetutil "C:\Dev\myproject" -auto-bump -bump-level patch
+```
+
+```bash
+nugetutil "C:\Dev\myproject" -force
 ```
 
 ## Parameters
@@ -107,6 +111,12 @@ Auto-bump state file:
 
 State is used for both default changed-package detection and `-auto-bump`.
 
+Behavior summary:
+
+- default: fingerprint-based changed packages only
+- `-force`: all discovered packages
+- `-auto-bump`: bump changed packages and dependent packages, then pack bumped packages
+
 On first run, if missing, NugetUtil creates a starter config automatically.
 
 Example:
@@ -166,3 +176,11 @@ The CLI prints:
 
 - `Job finished successfully.` on success
 - `Job failed with exit code: <code>` on failure
+
+## Help
+
+- `nugetutil`
+- `nugetutil -h`
+- `nugetutil --help`
+
+Help/usage invocations exit with code `0`.

@@ -4,6 +4,15 @@ internal static class NugetUtilProgram
     {
         try
         {
+            if (args.Length == 0 ||
+                args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase)))
+            {
+                PrintUsage();
+                return ExitCodes.Success;
+            }
+
             var parse = CliOptions.Parse(args);
             if (!parse.Success)
             {
@@ -358,7 +367,7 @@ internal static class NugetUtilProgram
         Console.WriteLine("  <path> = repository root path containing .csproj files");
         Console.WriteLine("Options:");
         Console.WriteLine("  -push");
-        Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"PeritusPackages\")");
+        Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");
         Console.WriteLine("  -configuration Release|Debug");
         Console.WriteLine("  -output \"<folder>\"");
         Console.WriteLine("  -skip-duplicate");

@@ -61,6 +61,7 @@ internal static class CsprojParser
                 Company: GetProperty(properties, "Company"),
                 Description: GetProperty(properties, "Description"),
                 PackageTags: GetProperty(properties, "PackageTags"),
+                PackageReadmeFile: GetProperty(properties, "PackageReadmeFile"),
                 IsPackable: !string.Equals(isPackable, "false", StringComparison.OrdinalIgnoreCase),
                 IsPackage: !string.IsNullOrWhiteSpace(packageId) &&
                            !string.IsNullOrWhiteSpace(version) &&

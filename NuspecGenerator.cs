@@ -144,6 +144,11 @@ internal static class NuspecGenerator
                 new XElement(ns + "description", package.Description),
                 new XElement(ns + "tags", string.IsNullOrWhiteSpace(package.PackageTags) ? package.PackageId : package.PackageTags));
 
+            if (!string.IsNullOrWhiteSpace(package.PackageReadmeFile))
+            {
+                metadata.Add(new XElement(ns + "readme", package.PackageReadmeFile));
+            }
+
             var group = new XElement(ns + "group", new XAttribute("targetFramework", packageTfm));
             foreach (var dep in dependencies)
             {
@@ -170,6 +175,13 @@ internal static class NuspecGenerator
             }
 
             files.Add(packageFile);
+
+            if (!string.IsNullOrWhiteSpace(package.PackageReadmeFile))
+            {
+                files.Add(new XElement(ns + "file",
+                    new XAttribute("src", package.PackageReadmeFile),
+                    new XAttribute("target", string.Empty)));
+            }
 
             foreach (var referenced in directNonPackableReferences.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
             {

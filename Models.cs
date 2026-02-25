@@ -9,6 +9,7 @@ internal sealed record ProjectInfo(
     string Company,
     string Description,
     string PackageTags,
+    string PackageReadmeFile,
     bool IsPackable,
     bool IsPackage,
     IReadOnlyList<string> ProjectReferences,
