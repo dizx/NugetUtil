@@ -50,6 +50,7 @@ nugetutil "C:\Dev\myproject" -force
 - `-push`
   - Push generated `.nupkg` files after packing.
   - Default: `false`.
+  - If no packages were rebuilt, NugetUtil can push matching existing `.nupkg` files from the output folder.
 
 - `-source "<name>"`
   - NuGet source name configured on your machine (for `dotnet nuget push --source`).
@@ -85,7 +86,7 @@ nugetutil "C:\Dev\myproject" -force
   - Version bump level used with `-auto-bump`.
   - Default: `patch`.
 
-- `-whatif`
+- `-dryrun`
   - Dry-run mode. Commands are printed but not executed.
 
 - `-yes`
@@ -116,6 +117,7 @@ Behavior summary:
 - default: fingerprint-based changed packages only
 - `-force`: all discovered packages
 - `-auto-bump`: bump changed packages and dependent packages, then pack bumped packages
+- with `-push` and no rebuilds: push existing output packages that match discovered package IDs
 
 On first run, if missing, NugetUtil creates a starter config automatically.
 

@@ -123,17 +123,29 @@ internal static class NugetUtilProgram
                     if (changedPaths.Count == 0)
                     {
                         Console.WriteLine("No package updates detected.");
-                        return ExitCodes.Success;
-                    }
+                        if (!options.Push)
+                        {
+                            return ExitCodes.Success;
+                        }
 
-                    selectedPackagePathSet = changedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                    Console.WriteLine("Changed packages:");
-                    foreach (var package in packageProjects.Where(p => selectedPackagePathSet.Contains(p.Path)).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase))
+                        Console.WriteLine("Push requested: looking for existing packages in output folder.");
+                        selectedPackagePathSet = [];
+                    }
+                    else
                     {
-                        Console.WriteLine($"- {package.PackageId} ({package.Version})");
+                        selectedPackagePathSet = changedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        Console.WriteLine("Changed packages:");
+                        foreach (var package in packageProjects.Where(p => selectedPackagePathSet.Contains(p.Path)).OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine($"- {package.PackageId} ({package.Version})");
+                        }
                     }
                 }
             }
+
+            var discoveredPackageIds = packageProjects
+                .Select(p => p.PackageId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var latestPackageVersions = packageProjects
                 .GroupBy(p => p.PackageId, StringComparer.OrdinalIgnoreCase)
@@ -299,9 +311,27 @@ internal static class NugetUtilProgram
             Console.WriteLine();
             Console.WriteLine($"Push source: {sourceName}");
 
+            var packagesToPush = new List<string>(createdPackages);
+            if (packagesToPush.Count == 0)
+            {
+                var fallbackPackages = FindExistingPackagesToPush(outputFolder, discoveredPackageIds);
+                packagesToPush.AddRange(fallbackPackages);
+                if (packagesToPush.Count == 0)
+                {
+                    Console.WriteLine("No matching existing packages found to push.");
+                    return ExitCodes.Success;
+                }
+
+                Console.WriteLine($"Using existing packages from output folder: {packagesToPush.Count}");
+                foreach (var path in packagesToPush)
+                {
+                    Console.WriteLine($"- {path}");
+                }
+            }
+
             if (!options.Yes && !options.WhatIf)
             {
-                Console.Write($"Push {createdPackages.Count} package(s)? [y/N]: ");
+                Console.Write($"Push {packagesToPush.Count} package(s)? [y/N]: ");
                 var answer = Console.ReadLine();
                 if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(answer, "yes", StringComparison.OrdinalIgnoreCase))
@@ -311,7 +341,7 @@ internal static class NugetUtilProgram
                 }
             }
 
-            foreach (var nupkg in createdPackages)
+            foreach (var nupkg in packagesToPush)
             {
                 var pushArgs = new List<string>
                 {
@@ -375,9 +405,31 @@ internal static class NugetUtilProgram
         Console.WriteLine("  -force");
         Console.WriteLine("  -auto-bump");
         Console.WriteLine("  -bump-level patch|minor|major");
-        Console.WriteLine("  -whatif");
+        Console.WriteLine("  -dryrun");
         Console.WriteLine("  -yes");
         Console.WriteLine("  -include \"<glob>\" (repeatable)");
         Console.WriteLine("  -exclude \"<glob>\" (repeatable)");
+    }
+
+    private static IReadOnlyList<string> FindExistingPackagesToPush(string outputFolder, IReadOnlySet<string> discoveredPackageIds)
+    {
+        if (!Directory.Exists(outputFolder) || discoveredPackageIds.Count == 0)
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(outputFolder, "*.nupkg", SearchOption.TopDirectoryOnly)
+            .Where(path =>
+            {
+                var name = Path.GetFileName(path);
+                if (name.Contains(".symbols.", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                return discoveredPackageIds.Any(id => name.StartsWith(id + ".", StringComparison.OrdinalIgnoreCase));
+            })
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

@@ -114,7 +114,7 @@ internal sealed record CliOptions(
                         return ParseResult.Fail("-bump-level must be patch, minor, or major.");
                     }
                     break;
-                case "-whatif":
+                case "-dryrun":
                     whatIf = true;
                     break;
                 case "-yes":
