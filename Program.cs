@@ -23,6 +23,8 @@ internal static class Program
     {
         return args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(a, "-v", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(a, "--version", StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase));
     }
 

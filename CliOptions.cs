@@ -118,20 +118,20 @@ internal sealed record CliOptions(
                 case "-force":
                     force = true;
                     break;
-                case "-auto-bump":
+                case "-autobump":
                     autoBump = true;
                     break;
-                case "-bump-level":
+                case "-bumplevel":
                     i++;
                     if (i >= args.Length)
                     {
-                        return ParseResult.Fail("-bump-level requires a value.");
+                        return ParseResult.Fail("-bumplevel requires a value.");
                     }
 
                     bumpLevel = args[i].Trim().ToLowerInvariant();
                     if (bumpLevel is not ("patch" or "minor" or "major"))
                     {
-                        return ParseResult.Fail("-bump-level must be patch, minor, or major.");
+                        return ParseResult.Fail("-bumplevel must be patch, minor, or major.");
                     }
                     break;
                 case "-dryrun":
@@ -194,13 +194,13 @@ internal sealed record CliOptions(
             return true;
         }
 
-        var hasSln = Directory.EnumerateFiles(path, "*.sln", SearchOption.TopDirectoryOnly).Any();
+        var hasSln = HasPatternInTopDirectory(path, "*.sln");
         if (hasSln)
         {
             return true;
         }
 
-        var hasTopLevelCsproj = Directory.EnumerateFiles(path, "*.csproj", SearchOption.TopDirectoryOnly).Any();
+        var hasTopLevelCsproj = HasPatternInTopDirectory(path, "*.csproj");
         if (hasTopLevelCsproj)
         {
             return true;
@@ -220,8 +220,8 @@ internal sealed record CliOptions(
             var (path, depth) = queue.Dequeue();
             inspected++;
 
-            if (Directory.EnumerateFiles(path, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
-                Directory.EnumerateFiles(path, "*.csproj", SearchOption.TopDirectoryOnly).Any())
+            if (HasPatternInTopDirectory(path, "*.sln") ||
+                HasPatternInTopDirectory(path, "*.csproj"))
             {
                 return true;
             }
@@ -253,11 +253,36 @@ internal sealed record CliOptions(
                     continue;
                 }
 
+                try
+                {
+                    var attributes = File.GetAttributes(child);
+                    if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    {
+                        continue;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+
                 queue.Enqueue((child, depth + 1));
             }
         }
 
         return false;
+    }
+
+    private static bool HasPatternInTopDirectory(string path, string pattern)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(path, pattern, SearchOption.TopDirectoryOnly).Any();
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 

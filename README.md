@@ -41,7 +41,7 @@ nugetutil "C:\Dev\myproject" -push -source "MyFeed"
 ```
 
 ```bash
-nugetutil "C:\Dev\myproject" -auto-bump -bump-level patch
+nugetutil "C:\Dev\myproject" -autobump -bumplevel patch
 ```
 
 ```bash
@@ -81,13 +81,13 @@ nugetutil "C:\Dev\myproject" -force
   - Processes all discovered packages, ignoring fingerprint change detection.
   - Useful when you want to regenerate/repack everything.
 
-- `-auto-bump`
+- `-autobump`
   - Uses filesystem fingerprints to detect which packages need a version bump.
   - Bumps changed packages and dependent packages, then packs only bumped packages.
   - Also updates matching internal `PackageReference` versions across discovered projects.
 
-- `-bump-level patch|minor|major`
-  - Version bump level used with `-auto-bump`.
+- `-bumplevel patch|minor|major`
+  - Version bump level used with `-autobump`.
   - Default: `patch`.
 
 - `-dryrun`
@@ -104,23 +104,26 @@ nugetutil "C:\Dev\myproject" -force
   - Repeatable exclude glob for project discovery.
   - Combined with config `behavior.excludeGlobs`.
 
+- `-v`, `--version`
+  - Prints NugetUtil version and exits.
+
 ## Config file
 
 Location:
 
 - `%APPDATA%\NugetUtil\config.json`
 
-Auto-bump state file:
+Autobump state file:
 
 - `%APPDATA%\NugetUtil\state.json`
 
-State is used for both default changed-package detection and `-auto-bump`.
+State is used for both default changed-package detection and `-autobump`.
 
 Behavior summary:
 
 - default: fingerprint-based changed packages only
 - `-force`: all discovered packages
-- `-auto-bump`: bump changed packages and dependent packages, then pack bumped packages
+- `-autobump`: bump changed packages and dependent packages, then pack bumped packages
 - with `-push` and no rebuilds: push existing output packages that match discovered package IDs
 
 On first run, if missing, NugetUtil creates a starter config automatically.
@@ -187,5 +190,7 @@ The CLI prints:
 
 - `nugetutil -h`
 - `nugetutil --help`
+- `nugetutil -v`
+- `nugetutil --version`
 
-Help/usage invocations exit with code `0`.
+Help/version invocations exit with code `0`.

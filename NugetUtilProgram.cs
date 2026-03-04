@@ -1,3 +1,5 @@
+using System.Reflection;
+
 internal static class NugetUtilProgram
 {
     public static async Task<int> RunAsync(string[] args)
@@ -9,6 +11,13 @@ internal static class NugetUtilProgram
                               string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase)))
             {
                 PrintUsage();
+                return ExitCodes.Success;
+            }
+
+            if (args.Any(a => string.Equals(a, "-v", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(a, "--version", StringComparison.OrdinalIgnoreCase)))
+            {
+                Console.WriteLine($"NugetUtil {GetToolVersion()}");
                 return ExitCodes.Success;
             }
 
@@ -52,7 +61,7 @@ internal static class NugetUtilProgram
             {
                 if (options.Force)
                 {
-                    Console.WriteLine("Auto-bump force mode enabled: bumping all discovered packages.");
+                    Console.WriteLine("Auto bump force mode enabled: bumping all discovered packages.");
                 }
 
                 var autoBumpResult = AutoBumpService.Apply(
@@ -398,6 +407,7 @@ internal static class NugetUtilProgram
 
     private static void PrintUsage()
     {
+        Console.WriteLine($"NugetUtil {GetToolVersion()}");
         Console.WriteLine("Usage: nugetutil [\"<path>\"] [options]");
         Console.WriteLine("  <path> = optional repository root path (defaults to current directory)");
         Console.WriteLine("Options:");
@@ -408,12 +418,26 @@ internal static class NugetUtilProgram
         Console.WriteLine("  -skip-duplicate");
         Console.WriteLine("  -verbose-build");
         Console.WriteLine("  -force");
-        Console.WriteLine("  -auto-bump");
-        Console.WriteLine("  -bump-level patch|minor|major");
+        Console.WriteLine("  -autobump");
+        Console.WriteLine("  -bumplevel patch|minor|major");
         Console.WriteLine("  -dryrun");
         Console.WriteLine("  -yes");
         Console.WriteLine("  -include \"<glob>\" (repeatable)");
         Console.WriteLine("  -exclude \"<glob>\" (repeatable)");
+        Console.WriteLine("  -v|--version");
+    }
+
+    private static string GetToolVersion()
+    {
+        var assembly = typeof(NugetUtilProgram).Assembly;
+        var info = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(info))
+        {
+            var plusIndex = info.IndexOf('+');
+            return plusIndex > 0 ? info[..plusIndex] : info;
+        }
+
+        return assembly.GetName().Version?.ToString() ?? "unknown";
     }
 
     private static IReadOnlyList<string> FindExistingPackagesToPush(string outputFolder, IReadOnlySet<string> discoveredPackageIds)
