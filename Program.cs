@@ -21,8 +21,7 @@ internal static class Program
 
     private static bool IsUsageInvocation(string[] args)
     {
-        return args.Length == 0 ||
-               args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
+        return args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase));
     }

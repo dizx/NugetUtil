@@ -4,8 +4,7 @@ internal static class NugetUtilProgram
     {
         try
         {
-            if (args.Length == 0 ||
-                args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
+            if (args.Any(a => string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
                               string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
                               string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase)))
             {
@@ -51,11 +50,17 @@ internal static class NugetUtilProgram
             HashSet<string>? selectedPackagePathSet = null;
             if (options.AutoBump)
             {
+                if (options.Force)
+                {
+                    Console.WriteLine("Auto-bump force mode enabled: bumping all discovered packages.");
+                }
+
                 var autoBumpResult = AutoBumpService.Apply(
                     rootPath: options.RootPath,
                     allProjects: allProjects,
                     packageProjects: packageProjects,
                     bumpLevel: options.BumpLevel,
+                    forceAll: options.Force,
                     whatIf: options.WhatIf);
 
                 if (!autoBumpResult.Success)
@@ -393,8 +398,8 @@ internal static class NugetUtilProgram
 
     private static void PrintUsage()
     {
-        Console.WriteLine("Usage: nugetutil \"<path>\" [options]");
-        Console.WriteLine("  <path> = repository root path containing .csproj files");
+        Console.WriteLine("Usage: nugetutil [\"<path>\"] [options]");
+        Console.WriteLine("  <path> = optional repository root path (defaults to current directory)");
         Console.WriteLine("Options:");
         Console.WriteLine("  -push");
         Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");

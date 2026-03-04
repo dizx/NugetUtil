@@ -16,21 +16,41 @@ internal sealed record CliOptions(
 {
     public static ParseResult Parse(string[] args)
     {
-        if (args.Length == 0)
-        {
-            return ParseResult.Fail("Missing rootPath.");
-        }
+        var optionStartIndex = 0;
+        var rootPath = Directory.GetCurrentDirectory();
+        var rootPathProvided = false;
 
-        var rootPath = args[0].Trim();
-        if (string.IsNullOrWhiteSpace(rootPath))
+        if (args.Length > 0 && !IsOption(args[0]))
         {
-            return ParseResult.Fail("rootPath is empty.");
+            rootPath = args[0].Trim();
+            optionStartIndex = 1;
+            rootPathProvided = true;
+            if (string.IsNullOrWhiteSpace(rootPath))
+            {
+                return ParseResult.Fail("rootPath is empty.");
+            }
         }
 
         rootPath = Path.GetFullPath(rootPath);
         if (!Directory.Exists(rootPath))
         {
             return ParseResult.Fail($"rootPath does not exist: {rootPath}");
+        }
+
+        if (!rootPathProvided)
+        {
+            var rootOfRootPath = Path.GetPathRoot(rootPath);
+            if (!string.IsNullOrWhiteSpace(rootOfRootPath) &&
+                string.Equals(rootPath.TrimEnd(Path.DirectorySeparatorChar), rootOfRootPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseResult.Fail("Current directory is a drive root. Run nugetutil from a project/solution folder or pass an explicit path.");
+            }
+
+            if (!LooksLikeSourcePath(rootPath))
+            {
+                return ParseResult.Fail(
+                    "Current directory does not look like a source/solution path. Run nugetutil from a folder containing .sln/.csproj (or subfolders with .sln/.csproj), or pass an explicit path.");
+            }
         }
 
         var push = false;
@@ -47,7 +67,7 @@ internal sealed record CliOptions(
         var includes = new List<string>();
         var excludes = new List<string>();
 
-        for (var i = 1; i < args.Length; i++)
+        for (var i = optionStartIndex; i < args.Length; i++)
         {
             var arg = args[i];
             switch (arg)
@@ -160,6 +180,84 @@ internal sealed record CliOptions(
             ExcludeGlobs: excludes);
 
         return ParseResult.Ok(options);
+    }
+
+    private static bool IsOption(string value)
+        => value.StartsWith("-", StringComparison.Ordinal) || value.StartsWith("/", StringComparison.Ordinal);
+
+    private static bool LooksLikeSourcePath(string path)
+    {
+        if (Directory.Exists(Path.Combine(path, ".git")) ||
+            File.Exists(Path.Combine(path, "Directory.Build.props")) ||
+            File.Exists(Path.Combine(path, "Directory.Build.targets")))
+        {
+            return true;
+        }
+
+        var hasSln = Directory.EnumerateFiles(path, "*.sln", SearchOption.TopDirectoryOnly).Any();
+        if (hasSln)
+        {
+            return true;
+        }
+
+        var hasTopLevelCsproj = Directory.EnumerateFiles(path, "*.csproj", SearchOption.TopDirectoryOnly).Any();
+        if (hasTopLevelCsproj)
+        {
+            return true;
+        }
+
+        return HasSolutionOrProjectWithinDepth(path, maxDepth: 3, maxDirectoriesToInspect: 300);
+    }
+
+    private static bool HasSolutionOrProjectWithinDepth(string rootPath, int maxDepth, int maxDirectoriesToInspect)
+    {
+        var inspected = 0;
+        var queue = new Queue<(string Path, int Depth)>();
+        queue.Enqueue((rootPath, 0));
+
+        while (queue.Count > 0 && inspected < maxDirectoriesToInspect)
+        {
+            var (path, depth) = queue.Dequeue();
+            inspected++;
+
+            if (Directory.EnumerateFiles(path, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
+                Directory.EnumerateFiles(path, "*.csproj", SearchOption.TopDirectoryOnly).Any())
+            {
+                return true;
+            }
+
+            if (depth >= maxDepth)
+            {
+                continue;
+            }
+
+            IEnumerable<string> children;
+            try
+            {
+                children = Directory.EnumerateDirectories(path);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var child in children)
+            {
+                var name = System.IO.Path.GetFileName(child);
+                if (name.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals(".vs", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("node_modules", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                queue.Enqueue((child, depth + 1));
+            }
+        }
+
+        return false;
     }
 }
 

@@ -16,6 +16,7 @@ internal static class AutoBumpService
         IReadOnlyDictionary<string, ProjectInfo> allProjects,
         IReadOnlyList<ProjectInfo> packageProjects,
         string bumpLevel,
+        bool forceAll,
         bool whatIf)
     {
         var stateResult = LoadState();
@@ -44,13 +45,23 @@ internal static class AutoBumpService
             .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Version, NugetVersionComparer.Instance).First(), StringComparer.OrdinalIgnoreCase);
 
         var directChanged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var package in packageProjects)
+        if (forceAll)
         {
-            if (!state.Packages.TryGetValue(package.Path, out var existing) ||
-                !string.Equals(existing.Fingerprint, fingerprintByPackagePath[package.Path], StringComparison.Ordinal) ||
-                !string.Equals(existing.Version, package.Version, StringComparison.OrdinalIgnoreCase))
+            foreach (var package in packageProjects)
             {
                 directChanged.Add(package.Path);
+            }
+        }
+        else
+        {
+            foreach (var package in packageProjects)
+            {
+                if (!state.Packages.TryGetValue(package.Path, out var existing) ||
+                    !string.Equals(existing.Fingerprint, fingerprintByPackagePath[package.Path], StringComparison.Ordinal) ||
+                    !string.Equals(existing.Version, package.Version, StringComparison.OrdinalIgnoreCase))
+                {
+                    directChanged.Add(package.Path);
+                }
             }
         }
 
@@ -96,6 +107,13 @@ internal static class AutoBumpService
                 {
                     return AutoBumpResult.Fail(updateResult.Error!);
                 }
+            }
+
+            var bumpedPackageIdVersions = BuildBumpedPackageIdVersionMap(packageByPath, bumpedVersions);
+            var packageRefUpdateResult = UpdatePackageReferenceVersions(allProjects.Keys, bumpedPackageIdVersions);
+            if (!packageRefUpdateResult.Success)
+            {
+                return AutoBumpResult.Fail(packageRefUpdateResult.Error!);
             }
         }
 
@@ -205,6 +223,95 @@ internal static class AutoBumpService
         }
 
         return dependents;
+    }
+
+    private static Dictionary<string, string> BuildBumpedPackageIdVersionMap(
+        IReadOnlyDictionary<string, ProjectInfo> packageByPath,
+        IReadOnlyDictionary<string, string> bumpedVersions)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in bumpedVersions)
+        {
+            if (!packageByPath.TryGetValue(kv.Key, out var package))
+            {
+                continue;
+            }
+
+            if (map.TryGetValue(package.PackageId, out var existing))
+            {
+                if (NugetVersionComparer.Instance.Compare(kv.Value, existing) > 0)
+                {
+                    map[package.PackageId] = kv.Value;
+                }
+            }
+            else
+            {
+                map[package.PackageId] = kv.Value;
+            }
+        }
+
+        return map;
+    }
+
+    private static UpdatePackageReferencesResult UpdatePackageReferenceVersions(
+        IEnumerable<string> allProjectPaths,
+        IReadOnlyDictionary<string, string> bumpedPackageIdVersions)
+    {
+        try
+        {
+            foreach (var projectPath in allProjectPaths.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var doc = XDocument.Load(projectPath, LoadOptions.PreserveWhitespace);
+                var changed = false;
+
+                foreach (var packageReference in doc.Descendants().Where(e => e.Name.LocalName == "PackageReference"))
+                {
+                    var id = packageReference.Attribute("Include")?.Value ?? packageReference.Attribute("Update")?.Value;
+                    if (string.IsNullOrWhiteSpace(id) || !bumpedPackageIdVersions.TryGetValue(id, out var newVersion))
+                    {
+                        continue;
+                    }
+
+                    var versionAttribute = packageReference.Attribute("Version");
+                    if (versionAttribute is not null)
+                    {
+                        if (!string.Equals(versionAttribute.Value, newVersion, StringComparison.Ordinal))
+                        {
+                            versionAttribute.Value = newVersion;
+                            changed = true;
+                        }
+
+                        continue;
+                    }
+
+                    var versionElement = packageReference.Elements().FirstOrDefault(e => e.Name.LocalName == "Version");
+                    if (versionElement is not null)
+                    {
+                        if (!string.Equals(versionElement.Value, newVersion, StringComparison.Ordinal))
+                        {
+                            versionElement.Value = newVersion;
+                            changed = true;
+                        }
+
+                        continue;
+                    }
+
+                    packageReference.Add(new XElement(packageReference.Name.Namespace + "Version", newVersion));
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    doc.Save(projectPath);
+                }
+            }
+
+            return UpdatePackageReferencesResult.Ok();
+        }
+        catch (Exception ex)
+        {
+            return UpdatePackageReferencesResult.Fail($"Failed updating package references: {ex.Message}");
+        }
     }
 
     private static UpdateVersionResult UpdateProjectVersion(string projectPath, string newVersion)
@@ -520,4 +627,10 @@ internal sealed record StateUpdateResult(bool Success, string? Error)
 {
     public static StateUpdateResult Ok() => new(true, null);
     public static StateUpdateResult Fail(string error) => new(false, error);
+}
+
+internal sealed record UpdatePackageReferencesResult(bool Success, string? Error)
+{
+    public static UpdatePackageReferencesResult Ok() => new(true, null);
+    public static UpdatePackageReferencesResult Fail(string error) => new(false, error);
 }

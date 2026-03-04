@@ -24,8 +24,11 @@ Nuspec mode is the default behavior and is required when a package project direc
 ## Usage
 
 ```bash
-nugetutil "<rootPath>" [options]
+nugetutil ["<rootPath>"] [options]
 ```
+
+If `<rootPath>` is omitted, NugetUtil uses the current directory.
+Current directory must contain `.sln`/`.csproj` (or subfolders containing `.sln`/`.csproj`).
 
 Examples:
 
@@ -81,6 +84,7 @@ nugetutil "C:\Dev\myproject" -force
 - `-auto-bump`
   - Uses filesystem fingerprints to detect which packages need a version bump.
   - Bumps changed packages and dependent packages, then packs only bumped packages.
+  - Also updates matching internal `PackageReference` versions across discovered projects.
 
 - `-bump-level patch|minor|major`
   - Version bump level used with `-auto-bump`.
@@ -181,7 +185,6 @@ The CLI prints:
 
 ## Help
 
-- `nugetutil`
 - `nugetutil -h`
 - `nugetutil --help`
 
