@@ -1,5 +1,7 @@
 internal sealed record CliOptions(
     string RootPath,
+    string? DeployablePackagePath,
+    bool SaveAxNuspec,
     bool Push,
     string? Source,
     string Configuration,
@@ -37,23 +39,9 @@ internal sealed record CliOptions(
             return ParseResult.Fail($"rootPath does not exist: {rootPath}");
         }
 
-        if (!rootPathProvided)
-        {
-            var rootOfRootPath = Path.GetPathRoot(rootPath);
-            if (!string.IsNullOrWhiteSpace(rootOfRootPath) &&
-                string.Equals(rootPath.TrimEnd(Path.DirectorySeparatorChar), rootOfRootPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-            {
-                return ParseResult.Fail("Current directory is a drive root. Run nugetutil from a project/solution folder or pass an explicit path.");
-            }
-
-            if (!LooksLikeSourcePath(rootPath))
-            {
-                return ParseResult.Fail(
-                    "Current directory does not look like a source/solution path. Run nugetutil from a folder containing .sln/.csproj (or subfolders with .sln/.csproj), or pass an explicit path.");
-            }
-        }
-
         var push = false;
+        string? deployablePackagePath = null;
+        var saveAxNuspec = false;
         string? source = null;
         var configuration = "Release";
         string? output = null;
@@ -74,6 +62,18 @@ internal sealed record CliOptions(
             {
                 case "-push":
                     push = true;
+                    break;
+                case "-deployable-package":
+                    i++;
+                    if (i >= args.Length)
+                    {
+                        return ParseResult.Fail("-deployable-package requires a value.");
+                    }
+
+                    deployablePackagePath = Path.GetFullPath(args[i]);
+                    break;
+                case "-save-nuspec":
+                    saveAxNuspec = true;
                     break;
                 case "-source":
                     i++;
@@ -163,8 +163,31 @@ internal sealed record CliOptions(
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(deployablePackagePath) && !File.Exists(deployablePackagePath))
+        {
+            return ParseResult.Fail($"Deployable package does not exist: {deployablePackagePath}");
+        }
+
+        if (!rootPathProvided && string.IsNullOrWhiteSpace(deployablePackagePath))
+        {
+            var rootOfRootPath = Path.GetPathRoot(rootPath);
+            if (!string.IsNullOrWhiteSpace(rootOfRootPath) &&
+                string.Equals(rootPath.TrimEnd(Path.DirectorySeparatorChar), rootOfRootPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseResult.Fail("Current directory is a drive root. Run nugetutil from a project/solution folder or pass an explicit path.");
+            }
+
+            if (!LooksLikeSourcePath(rootPath))
+            {
+                return ParseResult.Fail(
+                    "Current directory does not look like a source/solution path. Run nugetutil from a folder containing .sln/.csproj (or subfolders with .sln/.csproj), or pass an explicit path.");
+            }
+        }
+
         var options = new CliOptions(
             RootPath: rootPath,
+            DeployablePackagePath: deployablePackagePath,
+            SaveAxNuspec: saveAxNuspec,
             Push: push,
             Source: source,
             Configuration: configuration,

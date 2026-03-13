@@ -36,9 +36,11 @@ internal static class ProcessRunner
         using var process = new Process { StartInfo = processStartInfo };
         process.Start();
 
-        var stdOut = await process.StandardOutput.ReadToEndAsync();
-        var stdErr = await process.StandardError.ReadToEndAsync();
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
+        var stdOut = await stdOutTask;
+        var stdErr = await stdErrTask;
 
         if (process.ExitCode == 0)
         {

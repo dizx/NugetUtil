@@ -40,6 +40,120 @@ internal static class NugetUtilProgram
             }
 
             var config = configResult.Config!;
+
+            var configuredOutput = string.IsNullOrWhiteSpace(options.OutputFolderOverride)
+                ? (config.Behavior.OutputFolder ?? "artifacts\\nuget")
+                : options.OutputFolderOverride;
+            var effectiveSkipDuplicate = options.SkipDuplicateRequested || (config.Behavior.SkipDuplicate ?? true);
+
+            var outputFolder = Path.IsPathRooted(configuredOutput)
+                ? configuredOutput
+                : Path.GetFullPath(Path.Combine(options.RootPath, configuredOutput));
+
+            Directory.CreateDirectory(outputFolder);
+
+            if (!string.IsNullOrWhiteSpace(options.DeployablePackagePath))
+            {
+                Console.WriteLine($"Deployable package mode: {options.DeployablePackagePath}");
+
+                var axPackResult = await AxDeployablePackageService.BuildAsync(
+                    deployablePackagePath: options.DeployablePackagePath,
+                    outputFolder: outputFolder,
+                    workingDirectory: options.RootPath,
+                    saveNuspecToOutput: options.SaveAxNuspec,
+                    whatIf: options.WhatIf);
+
+                if (!axPackResult.Success)
+                {
+                    Console.Error.WriteLine(axPackResult.Error);
+                    return ExitCodes.PackFailed;
+                }
+
+                Console.WriteLine($"- PackageId: {axPackResult.PackageId}");
+                Console.WriteLine($"- Version: {axPackResult.Version}");
+                Console.WriteLine($"- Packed: {axPackResult.NupkgPath}");
+                if (!string.IsNullOrWhiteSpace(axPackResult.ExportedNuspecPath))
+                {
+                    Console.WriteLine($"- Nuspec: {axPackResult.ExportedNuspecPath}");
+                }
+
+                if (!options.Push)
+                {
+                    return ExitCodes.Success;
+                }
+
+                var axSourceName = string.IsNullOrWhiteSpace(options.Source) ? config.DefaultSource : options.Source;
+                if (string.IsNullOrWhiteSpace(axSourceName))
+                {
+                    Console.Error.WriteLine("No source provided and no defaultSource set in config.");
+                    return ExitCodes.InvalidArgsOrConfig;
+                }
+
+                if (!config.Sources.TryGetValue(axSourceName, out var axSourceConfig))
+                {
+                    Console.Error.WriteLine($"Source '{axSourceName}' not found in config.");
+                    return ExitCodes.InvalidArgsOrConfig;
+                }
+
+                if (string.IsNullOrWhiteSpace(axSourceConfig.ApiKey))
+                {
+                    Console.Error.WriteLine($"Source '{axSourceName}' must define apiKey.");
+                    return ExitCodes.InvalidArgsOrConfig;
+                }
+
+                Console.WriteLine();
+                Console.WriteLine($"Push source: {axSourceName}");
+
+                var axNupkgPath = axPackResult.NupkgPath;
+                if (string.IsNullOrWhiteSpace(axNupkgPath))
+                {
+                    Console.Error.WriteLine("AX package path is empty after packing.");
+                    return ExitCodes.PackFailed;
+                }
+
+                var pushArgs = new List<string>
+                {
+                    "push",
+                    axNupkgPath,
+                    "--source",
+                    axSourceName,
+                    "--api-key",
+                    axSourceConfig.ApiKey,
+                    "--interactive"
+                };
+
+                if (effectiveSkipDuplicate)
+                {
+                    pushArgs.Add("--skip-duplicate");
+                }
+
+                if (!options.Yes && !options.WhatIf)
+                {
+                    Console.Write("Push 1 package(s)? [y/N]: ");
+                    var answer = Console.ReadLine();
+                    if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(answer, "yes", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine("Push cancelled.");
+                        return ExitCodes.Success;
+                    }
+                }
+
+                var pushResult = await ProcessRunner.RunAsync(
+                    fileName: "dotnet",
+                    arguments: ["nuget", .. pushArgs],
+                    workingDirectory: options.RootPath,
+                    whatIf: options.WhatIf,
+                    sensitiveValues: [axSourceConfig.ApiKey]);
+
+                if (!pushResult.Success)
+                {
+                    return ExitCodes.PushFailed;
+                }
+
+                return ExitCodes.Success;
+            }
+
             var discovery = ProjectDiscovery.Discover(options, config);
             if (!discovery.Success)
             {
@@ -181,17 +295,6 @@ internal static class NugetUtilProgram
             {
                 Console.WriteLine($"- {package.PackageId} ({package.Path})");
             }
-
-            var configuredOutput = string.IsNullOrWhiteSpace(options.OutputFolderOverride)
-                ? (config.Behavior.OutputFolder ?? "artifacts\\nuget")
-                : options.OutputFolderOverride;
-            var effectiveSkipDuplicate = options.SkipDuplicateRequested || (config.Behavior.SkipDuplicate ?? true);
-
-            var outputFolder = Path.IsPathRooted(configuredOutput)
-                ? configuredOutput
-                : Path.GetFullPath(Path.Combine(options.RootPath, configuredOutput));
-
-            Directory.CreateDirectory(outputFolder);
 
             var createdPackages = new List<string>();
 
@@ -411,6 +514,8 @@ internal static class NugetUtilProgram
         Console.WriteLine("Usage: nugetutil [\"<path>\"] [options]");
         Console.WriteLine("  <path> = optional repository root path (defaults to current directory)");
         Console.WriteLine("Options:");
+        Console.WriteLine("  -deployable-package \"<zip>\"  (Dynamics AX deployable package zip)");
+        Console.WriteLine("  -save-nuspec   (with -deployable-package, save generated nuspec to output)");
         Console.WriteLine("  -push");
         Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");
         Console.WriteLine("  -configuration Release|Debug");

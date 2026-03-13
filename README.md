@@ -2,6 +2,8 @@
 
 NugetUtil is a small CLI that discovers packable `.csproj` files, builds them with `dotnet build`, regenerates `.nuspec` files, packs with `dotnet pack`, and optionally pushes packages with `dotnet nuget push`.
 
+It also supports Dynamics AX deployable package repacking mode via `-deployable-package`.
+
 ## What it does
 
 Given a repo root, NugetUtil will:
@@ -48,12 +50,31 @@ nugetutil "C:\Dev\myproject" -autobump -bumplevel patch
 nugetutil "C:\Dev\myproject" -force
 ```
 
+```bash
+nugetutil -deployable-package "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\ax"
+```
+
+```bash
+nugetutil -deployable-package "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\ax" -save-nuspec
+```
+
 ## Parameters
 
 - `-push`
   - Push generated `.nupkg` files after packing.
   - Default: `false`.
   - If no packages were rebuilt, NugetUtil can push matching existing `.nupkg` files from the output folder.
+
+- `-deployable-package "<zip>"`
+  - Dynamics AX mode: extracts payload from `AOSService\Packages\files\*.zip` inside a deployable package ZIP.
+  - Package id is inferred from the root `*.xref` filename (for example `BluestarPLM.xref` -> `BluestarPLM`).
+  - Package version is inferred from file version of `bin\Dynamics.AX.<PackageId>.dll`.
+  - Output package preserves package root layout and includes root `*.xref`, `bin\**`, `AdditionalFiles\**`, `Reports\**`, and `Resources\**`.
+  - Empty included folders are materialized with `_nugetutil.keep` so folder roots are preserved in the `.nupkg`.
+
+- `-save-nuspec`
+  - With `-deployable-package`, saves the generated nuspec to the output folder as `<PackageId>.nuspec`.
+  - If the file exists, it is overwritten.
 
 - `-source "<name>"`
   - NuGet source name configured on your machine (for `dotnet nuget push --source`).
