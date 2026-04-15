@@ -1,7 +1,7 @@
 internal sealed record CliOptions(
     string RootPath,
     string? DeployablePackagePath,
-    bool SaveAxNuspec,
+    bool SaveFoNuspec,
     bool Push,
     string? Source,
     string Configuration,
@@ -21,8 +21,14 @@ internal sealed record CliOptions(
         var optionStartIndex = 0;
         var rootPath = Directory.GetCurrentDirectory();
         var rootPathProvided = false;
+        var fopackMode = false;
 
-        if (args.Length > 0 && !IsOption(args[0]))
+        if (args.Length > 0 && string.Equals(args[0], "fopack", StringComparison.OrdinalIgnoreCase))
+        {
+            fopackMode = true;
+            optionStartIndex = 1;
+        }
+        else if (args.Length > 0 && !IsOption(args[0]))
         {
             rootPath = args[0].Trim();
             optionStartIndex = 1;
@@ -41,7 +47,7 @@ internal sealed record CliOptions(
 
         var push = false;
         string? deployablePackagePath = null;
-        var saveAxNuspec = false;
+        var saveFoNuspec = false;
         string? source = null;
         var configuration = "Release";
         string? output = null;
@@ -55,6 +61,23 @@ internal sealed record CliOptions(
         var includes = new List<string>();
         var excludes = new List<string>();
 
+        if (fopackMode)
+        {
+            if (optionStartIndex >= args.Length)
+            {
+                return ParseResult.Fail("fopack requires a deployable package zip path.");
+            }
+
+            var fopackPath = args[optionStartIndex].Trim();
+            if (string.IsNullOrWhiteSpace(fopackPath))
+            {
+                return ParseResult.Fail("fopack requires a deployable package zip path.");
+            }
+
+            deployablePackagePath = Path.GetFullPath(fopackPath);
+            optionStartIndex++;
+        }
+
         for (var i = optionStartIndex; i < args.Length; i++)
         {
             var arg = args[i];
@@ -63,17 +86,8 @@ internal sealed record CliOptions(
                 case "-push":
                     push = true;
                     break;
-                case "-deployable-package":
-                    i++;
-                    if (i >= args.Length)
-                    {
-                        return ParseResult.Fail("-deployable-package requires a value.");
-                    }
-
-                    deployablePackagePath = Path.GetFullPath(args[i]);
-                    break;
                 case "-save-nuspec":
-                    saveAxNuspec = true;
+                    saveFoNuspec = true;
                     break;
                 case "-source":
                     i++;
@@ -168,6 +182,11 @@ internal sealed record CliOptions(
             return ParseResult.Fail($"Deployable package does not exist: {deployablePackagePath}");
         }
 
+        if (fopackMode && rootPathProvided)
+        {
+            return ParseResult.Fail("fopack does not accept a repository root path as the first argument.");
+        }
+
         if (!rootPathProvided && string.IsNullOrWhiteSpace(deployablePackagePath))
         {
             var rootOfRootPath = Path.GetPathRoot(rootPath);
@@ -187,7 +206,7 @@ internal sealed record CliOptions(
         var options = new CliOptions(
             RootPath: rootPath,
             DeployablePackagePath: deployablePackagePath,
-            SaveAxNuspec: saveAxNuspec,
+            SaveFoNuspec: saveFoNuspec,
             Push: push,
             Source: source,
             Configuration: configuration,

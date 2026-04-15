@@ -54,27 +54,27 @@ internal static class NugetUtilProgram
 
             if (!string.IsNullOrWhiteSpace(options.DeployablePackagePath))
             {
-                Console.WriteLine($"Deployable package mode: {options.DeployablePackagePath}");
+                Console.WriteLine($"Dynamics 365 FO deployable package mode: {options.DeployablePackagePath}");
 
-                var axPackResult = await AxDeployablePackageService.BuildAsync(
+                var foPackResult = await FoDeployablePackageService.BuildAsync(
                     deployablePackagePath: options.DeployablePackagePath,
                     outputFolder: outputFolder,
                     workingDirectory: options.RootPath,
-                    saveNuspecToOutput: options.SaveAxNuspec,
+                    saveNuspecToOutput: options.SaveFoNuspec,
                     whatIf: options.WhatIf);
 
-                if (!axPackResult.Success)
+                if (!foPackResult.Success)
                 {
-                    Console.Error.WriteLine(axPackResult.Error);
+                    Console.Error.WriteLine(foPackResult.Error);
                     return ExitCodes.PackFailed;
                 }
 
-                Console.WriteLine($"- PackageId: {axPackResult.PackageId}");
-                Console.WriteLine($"- Version: {axPackResult.Version}");
-                Console.WriteLine($"- Packed: {axPackResult.NupkgPath}");
-                if (!string.IsNullOrWhiteSpace(axPackResult.ExportedNuspecPath))
+                Console.WriteLine($"- PackageId: {foPackResult.PackageId}");
+                Console.WriteLine($"- Version: {foPackResult.Version}");
+                Console.WriteLine($"- Packed: {foPackResult.NupkgPath}");
+                if (!string.IsNullOrWhiteSpace(foPackResult.ExportedNuspecPath))
                 {
-                    Console.WriteLine($"- Nuspec: {axPackResult.ExportedNuspecPath}");
+                    Console.WriteLine($"- Nuspec: {foPackResult.ExportedNuspecPath}");
                 }
 
                 if (!options.Push)
@@ -82,43 +82,43 @@ internal static class NugetUtilProgram
                     return ExitCodes.Success;
                 }
 
-                var axSourceName = string.IsNullOrWhiteSpace(options.Source) ? config.DefaultSource : options.Source;
-                if (string.IsNullOrWhiteSpace(axSourceName))
+                var foSourceName = string.IsNullOrWhiteSpace(options.Source) ? config.DefaultSource : options.Source;
+                if (string.IsNullOrWhiteSpace(foSourceName))
                 {
                     Console.Error.WriteLine("No source provided and no defaultSource set in config.");
                     return ExitCodes.InvalidArgsOrConfig;
                 }
 
-                if (!config.Sources.TryGetValue(axSourceName, out var axSourceConfig))
+                if (!config.Sources.TryGetValue(foSourceName, out var foSourceConfig))
                 {
-                    Console.Error.WriteLine($"Source '{axSourceName}' not found in config.");
+                    Console.Error.WriteLine($"Source '{foSourceName}' not found in config.");
                     return ExitCodes.InvalidArgsOrConfig;
                 }
 
-                if (string.IsNullOrWhiteSpace(axSourceConfig.ApiKey))
+                if (string.IsNullOrWhiteSpace(foSourceConfig.ApiKey))
                 {
-                    Console.Error.WriteLine($"Source '{axSourceName}' must define apiKey.");
+                    Console.Error.WriteLine($"Source '{foSourceName}' must define apiKey.");
                     return ExitCodes.InvalidArgsOrConfig;
                 }
 
                 Console.WriteLine();
-                Console.WriteLine($"Push source: {axSourceName}");
+                Console.WriteLine($"Push source: {foSourceName}");
 
-                var axNupkgPath = axPackResult.NupkgPath;
-                if (string.IsNullOrWhiteSpace(axNupkgPath))
+                var foNupkgPath = foPackResult.NupkgPath;
+                if (string.IsNullOrWhiteSpace(foNupkgPath))
                 {
-                    Console.Error.WriteLine("AX package path is empty after packing.");
+                    Console.Error.WriteLine("Dynamics 365 FO package path is empty after packing.");
                     return ExitCodes.PackFailed;
                 }
 
                 var pushArgs = new List<string>
                 {
                     "push",
-                    axNupkgPath,
+                    foNupkgPath,
                     "--source",
-                    axSourceName,
+                    foSourceName,
                     "--api-key",
-                    axSourceConfig.ApiKey,
+                    foSourceConfig.ApiKey,
                     "--interactive"
                 };
 
@@ -144,7 +144,7 @@ internal static class NugetUtilProgram
                     arguments: ["nuget", .. pushArgs],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
-                    sensitiveValues: [axSourceConfig.ApiKey]);
+                    sensitiveValues: [foSourceConfig.ApiKey]);
 
                 if (!pushResult.Success)
                 {
@@ -512,10 +512,10 @@ internal static class NugetUtilProgram
     {
         Console.WriteLine($"NugetUtil {GetToolVersion()}");
         Console.WriteLine("Usage: nugetutil [\"<path>\"] [options]");
+        Console.WriteLine("   or:  nugetutil fopack \"<zip>\" [options] (Dynamics 365 FO deployable package zip)");
         Console.WriteLine("  <path> = optional repository root path (defaults to current directory)");
         Console.WriteLine("Options:");
-        Console.WriteLine("  -deployable-package \"<zip>\"  (Dynamics AX deployable package zip)");
-        Console.WriteLine("  -save-nuspec   (with -deployable-package, save generated nuspec to output)");
+        Console.WriteLine("  -save-nuspec   (with fopack or -deployable-package, save generated nuspec to output)");
         Console.WriteLine("  -push");
         Console.WriteLine("  -source \"<name>\"   (NuGet source name, e.g. \"MyFeed\")");
         Console.WriteLine("  -configuration Release|Debug");

@@ -5,27 +5,27 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
-internal static class AxDeployablePackageService
+internal static class FoDeployablePackageService
 {
     private static readonly Regex VersionPattern = new(@"\d+\.\d+\.\d+(?:\.\d+)?", RegexOptions.Compiled);
     private static readonly string[] IncludedRootFolders = ["bin", "AdditionalFiles", "Reports", "Resources"];
     private const string EmptyFolderPlaceholderFileName = "_nugetutil.keep";
 
-    public static async Task<AxDeployablePackResult> BuildAsync(
+    public static async Task<FoDeployablePackResult> BuildAsync(
         string deployablePackagePath,
         string outputFolder,
         string workingDirectory,
         bool saveNuspecToOutput,
         bool whatIf)
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), "NugetUtil", "axpack", Guid.NewGuid().ToString("N"));
+        var tempRoot = Path.Combine(Path.GetTempPath(), "NugetUtil", "fopack", Guid.NewGuid().ToString("N"));
 
         try
         {
             var extractResult = ExtractPayload(deployablePackagePath, tempRoot);
             if (!extractResult.Success)
             {
-                return AxDeployablePackResult.Fail(extractResult.Error!);
+                return FoDeployablePackResult.Fail(extractResult.Error!);
             }
 
             var payload = extractResult.Payload!;
@@ -34,7 +34,7 @@ internal static class AxDeployablePackageService
             var nuspecWriteResult = WriteNuspec(nuspecPath, payload.PackageId, payload.Version, payload.XrefFileName);
             if (!nuspecWriteResult.Success)
             {
-                return AxDeployablePackResult.Fail(nuspecWriteResult.Error!);
+                return FoDeployablePackResult.Fail(nuspecWriteResult.Error!);
             }
 
             string? exportedNuspecPath = null;
@@ -55,11 +55,12 @@ internal static class AxDeployablePackageService
                 ],
                 workingDirectory: workingDirectory,
                 whatIf: whatIf,
-                sensitiveValues: []);
+                sensitiveValues: [],
+                printOutputOnSuccess: false);
 
             if (!packResult.Success)
             {
-                return AxDeployablePackResult.Fail(packResult.Error!);
+                return FoDeployablePackResult.Fail(packResult.Error!);
             }
 
             var nupkgPath = ResolvePackedNupkgPath(outputFolder, payload.PackageId, payload.Version);
@@ -68,11 +69,11 @@ internal static class AxDeployablePackageService
                 var expectedRaw = Path.Combine(outputFolder, $"{payload.PackageId}.{payload.Version}.nupkg");
                 var normalizedVersion = NormalizeVersionForNupkgFileName(payload.Version);
                 var expectedNormalized = Path.Combine(outputFolder, $"{payload.PackageId}.{normalizedVersion}.nupkg");
-                return AxDeployablePackResult.Fail(
+                return FoDeployablePackResult.Fail(
                     $"Pack succeeded but expected file not found. Checked: {expectedRaw}; {expectedNormalized}");
             }
 
-            return AxDeployablePackResult.Ok(
+            return FoDeployablePackResult.Ok(
                 payload.PackageId,
                 payload.Version,
                 nupkgPath ?? Path.Combine(outputFolder, $"{payload.PackageId}.{payload.Version}.nupkg"),
@@ -80,7 +81,7 @@ internal static class AxDeployablePackageService
         }
         catch (Exception ex)
         {
-            return AxDeployablePackResult.Fail($"Failed to pack deployable package '{deployablePackagePath}': {ex.Message}");
+            return FoDeployablePackResult.Fail($"Failed to pack deployable package '{deployablePackagePath}': {ex.Message}");
         }
         finally
         {
@@ -97,7 +98,7 @@ internal static class AxDeployablePackageService
         }
     }
 
-    private static AxPayloadExtractResult ExtractPayload(string deployablePackagePath, string stagingRoot)
+    private static FoPayloadExtractResult ExtractPayload(string deployablePackagePath, string stagingRoot)
     {
         using var outerArchive = ZipFile.OpenRead(deployablePackagePath);
         var innerZipEntry = outerArchive.Entries
@@ -105,7 +106,7 @@ internal static class AxDeployablePackageService
 
         if (innerZipEntry is null)
         {
-            return AxPayloadExtractResult.Fail("Could not find payload zip under AOSService/Packages/files/*.zip.");
+            return FoPayloadExtractResult.Fail("Could not find payload zip under AOSService/Packages/files/*.zip.");
         }
 
         using var innerZipBuffer = new MemoryStream();
@@ -122,14 +123,14 @@ internal static class AxDeployablePackageService
 
         if (xrefEntry is null)
         {
-            return AxPayloadExtractResult.Fail("Could not find root *.xref file in payload zip.");
+            return FoPayloadExtractResult.Fail("Could not find root *.xref file in payload zip.");
         }
 
         var xrefFileName = Path.GetFileName(NormalizeZipPath(xrefEntry.FullName));
         var packageId = Path.GetFileNameWithoutExtension(xrefFileName);
         if (string.IsNullOrWhiteSpace(packageId))
         {
-            return AxPayloadExtractResult.Fail("Could not determine package id from root .xref file.");
+            return FoPayloadExtractResult.Fail("Could not determine package id from root .xref file.");
         }
 
         var dllEntryPath = $"bin/Dynamics.AX.{packageId}.dll";
@@ -138,7 +139,7 @@ internal static class AxDeployablePackageService
 
         if (dllEntry is null)
         {
-            return AxPayloadExtractResult.Fail($"Could not find '{dllEntryPath}' in payload zip.");
+            return FoPayloadExtractResult.Fail($"Could not find '{dllEntryPath}' in payload zip.");
         }
 
         Directory.CreateDirectory(stagingRoot);
@@ -169,11 +170,11 @@ internal static class AxDeployablePackageService
         var versionResult = ReadNugetVersionFromFileVersion(extractedDllPath);
         if (!versionResult.Success)
         {
-            return AxPayloadExtractResult.Fail(versionResult.Error!);
+            return FoPayloadExtractResult.Fail(versionResult.Error!);
         }
 
-        var payload = new AxPayloadInfo(packageId, versionResult.Version!, xrefFileName);
-        return AxPayloadExtractResult.Ok(payload);
+        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName);
+        return FoPayloadExtractResult.Ok(payload);
     }
 
     private static bool IsInnerPayloadZip(string fullName)
@@ -345,7 +346,7 @@ internal static class AxDeployablePackageService
                         new XElement(ns + "authors", packageId),
                         new XElement(ns + "owners", packageId),
                         new XElement(ns + "requireLicenseAcceptance", "false"),
-                        new XElement(ns + "description", "Compiled artifacts extracted from a Dynamics AX deployable package."),
+                        new XElement(ns + "description", "Compiled artifacts extracted from a Dynamics 365 FO deployable package."),
                         new XElement(ns + "tags", packageId)),
                     new XElement(ns + "files",
                         new XElement(ns + "file",
@@ -384,11 +385,11 @@ internal static class AxDeployablePackageService
         }
     }
 
-    private sealed record AxPayloadInfo(string PackageId, string Version, string XrefFileName);
-    private sealed record AxPayloadExtractResult(bool Success, AxPayloadInfo? Payload, string? Error)
+    private sealed record FoPayloadInfo(string PackageId, string Version, string XrefFileName);
+    private sealed record FoPayloadExtractResult(bool Success, FoPayloadInfo? Payload, string? Error)
     {
-        public static AxPayloadExtractResult Ok(AxPayloadInfo payload) => new(true, payload, null);
-        public static AxPayloadExtractResult Fail(string error) => new(false, null, error);
+        public static FoPayloadExtractResult Ok(FoPayloadInfo payload) => new(true, payload, null);
+        public static FoPayloadExtractResult Fail(string error) => new(false, null, error);
     }
 
     private sealed record VersionReadResult(bool Success, string? Version, string? Error)
@@ -398,16 +399,16 @@ internal static class AxDeployablePackageService
     }
 }
 
-internal sealed record AxDeployablePackResult(bool Success, string? PackageId, string? Version, string? NupkgPath, string? Error)
+internal sealed record FoDeployablePackResult(bool Success, string? PackageId, string? Version, string? NupkgPath, string? Error)
 {
     public string? ExportedNuspecPath { get; init; }
 
-    public static AxDeployablePackResult Ok(string packageId, string version, string nupkgPath, string? exportedNuspecPath)
+    public static FoDeployablePackResult Ok(string packageId, string version, string nupkgPath, string? exportedNuspecPath)
         => new(true, packageId, version, nupkgPath, null)
         {
             ExportedNuspecPath = exportedNuspecPath
         };
 
-    public static AxDeployablePackResult Fail(string error)
+    public static FoDeployablePackResult Fail(string error)
         => new(false, null, null, null, error);
 }
