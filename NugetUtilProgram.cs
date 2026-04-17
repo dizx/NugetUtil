@@ -57,7 +57,7 @@ internal static class NugetUtilProgram
                 Console.WriteLine($"Dynamics 365 FO deployable package mode: {options.DeployablePackagePath}");
 
                 var foPackResult = await FoDeployablePackageService.BuildAsync(
-                    deployablePackagePath: options.DeployablePackagePath,
+                    packageSourcePath: options.DeployablePackagePath,
                     outputFolder: outputFolder,
                     workingDirectory: options.RootPath,
                     saveNuspecToOutput: options.SaveFoNuspec,

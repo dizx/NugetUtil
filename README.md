@@ -4,6 +4,8 @@ NugetUtil is a small CLI that discovers packable `.csproj` files, builds them wi
 
 It also supports Dynamics 365 FO deployable package repacking mode via `fopack`.
 
+`fopack` accepts either a deployable package ZIP or a prepared model directory.
+
 ## What it does
 
 Given a repo root, NugetUtil will:
@@ -35,27 +37,35 @@ Current directory must contain `.sln`/`.csproj` (or subfolders containing `.sln`
 Examples:
 
 ```bash
-nugetutil "C:\Dev\myproject" -push
+nugetutil "C:\Dev\sample-repo" -push
 ```
 
 ```bash
-nugetutil "C:\Dev\myproject" -push -source "MyFeed"
+nugetutil "C:\Dev\sample-repo" -push -source "PrivateFeed"
 ```
 
 ```bash
-nugetutil "C:\Dev\myproject" -autobump -bumplevel patch
+nugetutil "C:\Dev\sample-repo" -push -source "PrivateFeed" -api-key "YOUR_API_KEY"
 ```
 
 ```bash
-nugetutil "C:\Dev\myproject" -force
+nugetutil "C:\Dev\sample-repo" -autobump -bumplevel patch
 ```
 
 ```bash
-nugetutil fopack "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\fo"
+nugetutil "C:\Dev\sample-repo" -force
 ```
 
 ```bash
-nugetutil fopack "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\fo" -save-nuspec
+nugetutil fopack "C:\Downloads\Contoso.Module.1.2.3.zip" -output "artifacts\\fo"
+```
+
+```bash
+nugetutil fopack "C:\Downloads\Contoso.Module.1.2.3.zip" -output "artifacts\\fo" -save-nuspec
+```
+
+```bash
+nugetutil fopack "C:\Temp\SampleModule" -output "artifacts\\fo" -save-nuspec
 ```
 
 ## Parameters
@@ -66,7 +76,9 @@ nugetutil fopack "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\fo
   - If no packages were rebuilt, NugetUtil can push matching existing `.nupkg` files from the output folder.
 
 - `fopack "<zip>"`
-  - Dynamics 365 FO mode: extracts payload from `AOSService\Packages\files\*.zip` inside a deployable package ZIP.
+  - Dynamics 365 FO mode: accepts either a deployable package ZIP or a prepared model directory.
+  - For ZIP input, extracts payload from `AOSService\Packages\files\*.zip` inside the deployable package.
+  - For directory input, expects a root `*.xref` file and package folders such as `bin`, `AdditionalFiles`, `Reports`, and `Resources`.
   - Package id is inferred from the root `*.xref` filename (for example `Packagename.xref` -> `Packagename`).
   - Package version is inferred from file version of `bin\Dynamics.AX.<PackageId>.dll`.
   - Output package preserves package root layout and includes root `*.xref`, `bin\**`, `AdditionalFiles\**`, `Reports\**`, and `Resources\**`.
@@ -78,8 +90,13 @@ nugetutil fopack "C:\Downloads\Bluestar PLM 7.6.18.3.zip" -output "artifacts\\fo
 
 - `-source "<name>"`
   - NuGet source name configured on your machine (for `dotnet nuget push --source`).
-  - Must also exist in config `sources` to resolve API key.
+  - Must also exist in config `sources` when `-api-key` is not provided.
   - Default: `defaultSource` from config.
+
+- `-api-key "<key>"`
+  - Overrides `apiKey` from config for push operations.
+  - Useful for passing a temporary key from command line.
+  - If omitted, key is loaded from config source entry.
 
 - `-configuration Release|Debug`
   - Build configuration for `dotnet build`.
@@ -153,10 +170,10 @@ Example:
 
 ```json
 {
-  "defaultSource": "MyFeed",
+  "defaultSource": "PrivateFeed",
   "sources": {
-    "MyFeed": {
-      "apiKey": "AZURE_DEVOPS_PAT_OR_NUGET_KEY"
+    "PrivateFeed": {
+      "apiKey": "REPLACE_WITH_YOUR_API_KEY"
     }
   },
   "behavior": {

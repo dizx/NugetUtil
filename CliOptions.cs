@@ -4,6 +4,7 @@ internal sealed record CliOptions(
     bool SaveFoNuspec,
     bool Push,
     string? Source,
+    string? ApiKey,
     string Configuration,
     string? OutputFolderOverride,
     bool SkipDuplicateRequested,
@@ -49,6 +50,7 @@ internal sealed record CliOptions(
         string? deployablePackagePath = null;
         var saveFoNuspec = false;
         string? source = null;
+        string? apiKey = null;
         var configuration = "Release";
         string? output = null;
         var skipDuplicate = false;
@@ -97,6 +99,17 @@ internal sealed record CliOptions(
                     }
 
                     source = args[i];
+                    break;
+                case "-apikey":
+                case "-api-key":
+                case "--api-key":
+                    i++;
+                    if (i >= args.Length)
+                    {
+                        return ParseResult.Fail($"{arg} requires a value.");
+                    }
+
+                    apiKey = args[i];
                     break;
                 case "-configuration":
                     i++;
@@ -177,9 +190,11 @@ internal sealed record CliOptions(
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(deployablePackagePath) && !File.Exists(deployablePackagePath))
+        if (!string.IsNullOrWhiteSpace(deployablePackagePath) &&
+            !File.Exists(deployablePackagePath) &&
+            !Directory.Exists(deployablePackagePath))
         {
-            return ParseResult.Fail($"Deployable package does not exist: {deployablePackagePath}");
+            return ParseResult.Fail($"Dynamics 365 FO package source does not exist: {deployablePackagePath}");
         }
 
         if (fopackMode && rootPathProvided)
@@ -209,6 +224,7 @@ internal sealed record CliOptions(
             SaveFoNuspec: saveFoNuspec,
             Push: push,
             Source: source,
+            ApiKey: apiKey,
             Configuration: configuration,
             OutputFolderOverride: output,
             SkipDuplicateRequested: skipDuplicate,

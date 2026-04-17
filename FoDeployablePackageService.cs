@@ -12,7 +12,7 @@ internal static class FoDeployablePackageService
     private const string EmptyFolderPlaceholderFileName = "_nugetutil.keep";
 
     public static async Task<FoDeployablePackResult> BuildAsync(
-        string deployablePackagePath,
+        string packageSourcePath,
         string outputFolder,
         string workingDirectory,
         bool saveNuspecToOutput,
@@ -22,7 +22,7 @@ internal static class FoDeployablePackageService
 
         try
         {
-            var extractResult = ExtractPayload(deployablePackagePath, tempRoot);
+            var extractResult = ExtractPayload(packageSourcePath, tempRoot);
             if (!extractResult.Success)
             {
                 return FoDeployablePackResult.Fail(extractResult.Error!);
@@ -81,7 +81,7 @@ internal static class FoDeployablePackageService
         }
         catch (Exception ex)
         {
-            return FoDeployablePackResult.Fail($"Failed to pack deployable package '{deployablePackagePath}': {ex.Message}");
+            return FoDeployablePackResult.Fail($"Failed to pack Dynamics 365 FO package source '{packageSourcePath}': {ex.Message}");
         }
         finally
         {
@@ -98,7 +98,22 @@ internal static class FoDeployablePackageService
         }
     }
 
-    private static FoPayloadExtractResult ExtractPayload(string deployablePackagePath, string stagingRoot)
+    private static FoPayloadExtractResult ExtractPayload(string packageSourcePath, string stagingRoot)
+    {
+        if (Directory.Exists(packageSourcePath))
+        {
+            return StagePayloadFromDirectory(packageSourcePath, stagingRoot);
+        }
+
+        if (File.Exists(packageSourcePath))
+        {
+            return StagePayloadFromDeployableZip(packageSourcePath, stagingRoot);
+        }
+
+        return FoPayloadExtractResult.Fail($"Dynamics 365 FO package source does not exist: {packageSourcePath}");
+    }
+
+    private static FoPayloadExtractResult StagePayloadFromDeployableZip(string deployablePackagePath, string stagingRoot)
     {
         using var outerArchive = ZipFile.OpenRead(deployablePackagePath);
         var innerZipEntry = outerArchive.Entries
@@ -177,6 +192,40 @@ internal static class FoDeployablePackageService
         return FoPayloadExtractResult.Ok(payload);
     }
 
+    private static FoPayloadExtractResult StagePayloadFromDirectory(string sourceDirectory, string stagingRoot)
+    {
+        Directory.CreateDirectory(stagingRoot);
+
+        var xrefPath = Directory.EnumerateFiles(sourceDirectory, "*.xref", SearchOption.TopDirectoryOnly)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(xrefPath))
+        {
+            return FoPayloadExtractResult.Fail("Could not find root *.xref file in Dynamics 365 FO source directory.");
+        }
+
+        var xrefFileName = Path.GetFileName(xrefPath);
+        var packageId = Path.GetFileNameWithoutExtension(xrefFileName);
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            return FoPayloadExtractResult.Fail("Could not determine package id from root .xref file.");
+        }
+
+        CopyDirectoryPayload(sourceDirectory, stagingRoot, xrefPath);
+        EnsureIncludedFoldersMaterialized(stagingRoot);
+
+        var dllPath = Path.Combine(stagingRoot, "bin", $"Dynamics.AX.{packageId}.dll");
+        var versionResult = ReadNugetVersionFromFileVersion(dllPath);
+        if (!versionResult.Success)
+        {
+            return FoPayloadExtractResult.Fail(versionResult.Error!);
+        }
+
+        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName);
+        return FoPayloadExtractResult.Ok(payload);
+    }
+
     private static bool IsInnerPayloadZip(string fullName)
     {
         var normalized = NormalizeZipPath(fullName);
@@ -246,6 +295,39 @@ internal static class FoDeployablePackageService
             if (!File.Exists(placeholderPath))
             {
                 File.WriteAllText(placeholderPath, string.Empty, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+        }
+    }
+
+    private static void CopyDirectoryPayload(string sourceDirectory, string stagingRoot, string xrefPath)
+    {
+        File.Copy(xrefPath, Path.Combine(stagingRoot, Path.GetFileName(xrefPath)), overwrite: true);
+
+        foreach (var root in IncludedRootFolders)
+        {
+            var sourceRoot = Path.Combine(sourceDirectory, root);
+            if (!Directory.Exists(sourceRoot))
+            {
+                continue;
+            }
+
+            foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(sourceDirectory, directory);
+                Directory.CreateDirectory(Path.Combine(stagingRoot, relative));
+            }
+
+            foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(sourceDirectory, file);
+                var destination = Path.Combine(stagingRoot, relative);
+                var destinationDirectory = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                {
+                    Directory.CreateDirectory(destinationDirectory);
+                }
+
+                File.Copy(file, destination, overwrite: true);
             }
         }
     }
