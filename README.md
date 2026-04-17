@@ -25,6 +25,41 @@ Nuspec mode is the default behavior and is required when a package project direc
 
 - .NET SDK installed (`dotnet` on PATH)
 
+## Installation (Windows)
+
+Recommended install location:
+
+- `C:\nuget\`
+
+Suggested layout:
+
+- `C:\nuget\nugetutil.exe`
+
+Add install folder to `PATH`:
+
+1. Open **System Properties** → **Advanced** → **Environment Variables**.
+2. Under **User variables** (or **System variables**), edit `Path`.  
+3. Add: `C:\nuget\`
+4. Open a new terminal and verify:
+
+```powershell
+nugetutil --version
+```
+
+Config file path:
+
+- `%APPDATA%\NugetUtil\config.json`
+- Example expanded path: `C:\Users\<you>\AppData\Roaming\NugetUtil\config.json`
+
+State file path:
+
+- `%APPDATA%\NugetUtil\state.json`
+
+Notes:
+
+- NugetUtil creates a starter `config.json` on first run if missing.
+- `apiKey` can be set in config or provided at runtime with `-api-key`.
+
 ## Usage
 
 ```bash
