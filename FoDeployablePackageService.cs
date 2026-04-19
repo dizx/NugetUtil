@@ -31,7 +31,7 @@ internal static class FoDeployablePackageService
             var payload = extractResult.Payload!;
 
             var nuspecPath = Path.Combine(tempRoot, payload.PackageId + ".nuspec");
-            var nuspecWriteResult = WriteNuspec(nuspecPath, payload.PackageId, payload.Version, payload.XrefFileName);
+            var nuspecWriteResult = WriteNuspec(nuspecPath, payload.PackageId, payload.Version, payload.XrefFileName, payload.PresentRoots);
             if (!nuspecWriteResult.Success)
             {
                 return FoDeployablePackResult.Fail(nuspecWriteResult.Error!);
@@ -158,6 +158,7 @@ internal static class FoDeployablePackageService
         }
 
         Directory.CreateDirectory(stagingRoot);
+        var presentRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in innerArchive.Entries)
         {
@@ -166,6 +167,7 @@ internal static class FoDeployablePackageService
             {
                 if (IsSelectedPayloadPath(normalized))
                 {
+                    AddPresentRoot(normalized, presentRoots);
                     EnsureDirectoryEntry(normalized, stagingRoot);
                 }
 
@@ -175,11 +177,12 @@ internal static class FoDeployablePackageService
             if (string.Equals(normalized, NormalizeZipPath(xrefEntry.FullName), StringComparison.OrdinalIgnoreCase) ||
                 IsSelectedPayloadPath(normalized))
             {
+                AddPresentRoot(normalized, presentRoots);
                 ExtractEntry(entry, stagingRoot);
             }
         }
 
-        EnsureIncludedFoldersMaterialized(stagingRoot);
+        EnsureIncludedFoldersMaterialized(stagingRoot, presentRoots);
 
         var extractedDllPath = Path.Combine(stagingRoot, dllEntryPath.Replace('/', Path.DirectorySeparatorChar));
         var versionResult = ReadNugetVersionFromFileVersion(extractedDllPath);
@@ -188,7 +191,7 @@ internal static class FoDeployablePackageService
             return FoPayloadExtractResult.Fail(versionResult.Error!);
         }
 
-        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName);
+        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName, presentRoots);
         return FoPayloadExtractResult.Ok(payload);
     }
 
@@ -212,8 +215,8 @@ internal static class FoDeployablePackageService
             return FoPayloadExtractResult.Fail("Could not determine package id from root .xref file.");
         }
 
-        CopyDirectoryPayload(sourceDirectory, stagingRoot, xrefPath);
-        EnsureIncludedFoldersMaterialized(stagingRoot);
+        var presentRoots = CopyDirectoryPayload(sourceDirectory, stagingRoot, xrefPath);
+        EnsureIncludedFoldersMaterialized(stagingRoot, presentRoots);
 
         var dllPath = Path.Combine(stagingRoot, "bin", $"Dynamics.AX.{packageId}.dll");
         var versionResult = ReadNugetVersionFromFileVersion(dllPath);
@@ -222,7 +225,7 @@ internal static class FoDeployablePackageService
             return FoPayloadExtractResult.Fail(versionResult.Error!);
         }
 
-        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName);
+        var payload = new FoPayloadInfo(packageId, versionResult.Version!, xrefFileName, presentRoots);
         return FoPayloadExtractResult.Ok(payload);
     }
 
@@ -278,9 +281,9 @@ internal static class FoDeployablePackageService
         Directory.CreateDirectory(destinationPath);
     }
 
-    private static void EnsureIncludedFoldersMaterialized(string stagingRoot)
+    private static void EnsureIncludedFoldersMaterialized(string stagingRoot, IReadOnlySet<string> presentRoots)
     {
-        foreach (var root in IncludedRootFolders)
+        foreach (var root in presentRoots)
         {
             var rootPath = Path.Combine(stagingRoot, root);
             Directory.CreateDirectory(rootPath);
@@ -299,8 +302,9 @@ internal static class FoDeployablePackageService
         }
     }
 
-    private static void CopyDirectoryPayload(string sourceDirectory, string stagingRoot, string xrefPath)
+    private static HashSet<string> CopyDirectoryPayload(string sourceDirectory, string stagingRoot, string xrefPath)
     {
+        var presentRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         File.Copy(xrefPath, Path.Combine(stagingRoot, Path.GetFileName(xrefPath)), overwrite: true);
 
         foreach (var root in IncludedRootFolders)
@@ -310,6 +314,8 @@ internal static class FoDeployablePackageService
             {
                 continue;
             }
+
+            presentRoots.Add(root);
 
             foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
             {
@@ -330,6 +336,8 @@ internal static class FoDeployablePackageService
                 File.Copy(file, destination, overwrite: true);
             }
         }
+
+        return presentRoots;
     }
 
     private static VersionReadResult ReadNugetVersionFromFileVersion(string dllPath)
@@ -413,11 +421,33 @@ internal static class FoDeployablePackageService
         => IncludedRootFolders.Any(root =>
             normalizedPath.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase));
 
-    private static NuspecWriteResult WriteNuspec(string nuspecPath, string packageId, string version, string xrefFileName)
+    private static void AddPresentRoot(string normalizedPath, ISet<string> presentRoots)
+    {
+        var root = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(root) && IncludedRootFolders.Contains(root, StringComparer.OrdinalIgnoreCase))
+        {
+            presentRoots.Add(root);
+        }
+    }
+
+    private static NuspecWriteResult WriteNuspec(string nuspecPath, string packageId, string version, string xrefFileName, IReadOnlySet<string> presentRoots)
     {
         try
         {
             var ns = XNamespace.Get("http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd");
+            var fileElements = new List<XElement>();
+
+            foreach (var root in IncludedRootFolders.Where(root => presentRoots.Contains(root)))
+            {
+                fileElements.Add(new XElement(ns + "file",
+                    new XAttribute("src", root + "\\**"),
+                    new XAttribute("target", root)));
+            }
+
+            fileElements.Add(new XElement(ns + "file",
+                new XAttribute("src", xrefFileName),
+                new XAttribute("target", string.Empty)));
+
             var document = new XDocument(
                 new XDeclaration("1.0", "utf-8", null),
                 new XElement(ns + "package",
@@ -430,22 +460,7 @@ internal static class FoDeployablePackageService
                         new XElement(ns + "requireLicenseAcceptance", "false"),
                         new XElement(ns + "description", "Compiled artifacts extracted from a Dynamics 365 FO deployable package."),
                         new XElement(ns + "tags", packageId)),
-                    new XElement(ns + "files",
-                        new XElement(ns + "file",
-                            new XAttribute("src", "bin\\**"),
-                            new XAttribute("target", "bin")),
-                        new XElement(ns + "file",
-                            new XAttribute("src", "AdditionalFiles\\**"),
-                            new XAttribute("target", "AdditionalFiles")),
-                        new XElement(ns + "file",
-                            new XAttribute("src", "Reports\\**"),
-                            new XAttribute("target", "Reports")),
-                        new XElement(ns + "file",
-                            new XAttribute("src", "Resources\\**"),
-                            new XAttribute("target", "Resources")),
-                        new XElement(ns + "file",
-                            new XAttribute("src", xrefFileName),
-                            new XAttribute("target", string.Empty)))));
+                    new XElement(ns + "files", fileElements)));
 
             var settings = new XmlWriterSettings
             {
@@ -467,7 +482,7 @@ internal static class FoDeployablePackageService
         }
     }
 
-    private sealed record FoPayloadInfo(string PackageId, string Version, string XrefFileName);
+    private sealed record FoPayloadInfo(string PackageId, string Version, string XrefFileName, IReadOnlySet<string> PresentRoots);
     private sealed record FoPayloadExtractResult(bool Success, FoPayloadInfo? Payload, string? Error)
     {
         public static FoPayloadExtractResult Ok(FoPayloadInfo payload) => new(true, payload, null);

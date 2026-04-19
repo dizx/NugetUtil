@@ -95,7 +95,8 @@ internal static class NugetUtilProgram
                     return ExitCodes.InvalidArgsOrConfig;
                 }
 
-                if (string.IsNullOrWhiteSpace(foSourceConfig.ApiKey))
+                var foApiKey = string.IsNullOrWhiteSpace(options.ApiKey) ? foSourceConfig.ApiKey : options.ApiKey;
+                if (string.IsNullOrWhiteSpace(foApiKey))
                 {
                     Console.Error.WriteLine($"Source '{foSourceName}' must define apiKey.");
                     return ExitCodes.InvalidArgsOrConfig;
@@ -118,7 +119,7 @@ internal static class NugetUtilProgram
                     "--source",
                     foSourceName,
                     "--api-key",
-                    foSourceConfig.ApiKey,
+                    foApiKey,
                     "--interactive"
                 };
 
@@ -144,7 +145,7 @@ internal static class NugetUtilProgram
                     arguments: ["nuget", .. pushArgs],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
-                    sensitiveValues: [foSourceConfig.ApiKey]);
+                    sensitiveValues: [foApiKey]);
 
                 if (!pushResult.Success)
                 {
@@ -419,7 +420,8 @@ internal static class NugetUtilProgram
                 return ExitCodes.InvalidArgsOrConfig;
             }
 
-            if (string.IsNullOrWhiteSpace(sourceConfig.ApiKey))
+            var apiKey = string.IsNullOrWhiteSpace(options.ApiKey) ? sourceConfig.ApiKey : options.ApiKey;
+            if (string.IsNullOrWhiteSpace(apiKey))
             {
                 Console.Error.WriteLine($"Source '{sourceName}' must define apiKey.");
                 return ExitCodes.InvalidArgsOrConfig;
@@ -467,7 +469,7 @@ internal static class NugetUtilProgram
                     "--source",
                     sourceName,
                     "--api-key",
-                    sourceConfig.ApiKey,
+                    apiKey,
                     "--interactive"
                 };
 
@@ -481,7 +483,7 @@ internal static class NugetUtilProgram
                     arguments: ["nuget", .. pushArgs],
                     workingDirectory: options.RootPath,
                     whatIf: options.WhatIf,
-                    sensitiveValues: [sourceConfig.ApiKey]);
+                    sensitiveValues: [apiKey]);
 
                 if (!pushResult.Success)
                 {

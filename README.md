@@ -116,8 +116,8 @@ nugetutil fopack "C:\Temp\SampleModule" -output "artifacts\\fo" -save-nuspec
   - For directory input, expects a root `*.xref` file and package folders such as `bin`, `AdditionalFiles`, `Reports`, and `Resources`.
   - Package id is inferred from the root `*.xref` filename (for example `Packagename.xref` -> `Packagename`).
   - Package version is inferred from file version of `bin\Dynamics.AX.<PackageId>.dll`.
-  - Output package preserves package root layout and includes root `*.xref`, `bin\**`, `AdditionalFiles\**`, `Reports\**`, and `Resources\**`.
-  - Empty included folders are materialized with `_nugetutil.keep` so folder roots are preserved in the `.nupkg`.
+  - Output package preserves package root layout and includes root `*.xref` plus only the source folders that actually existed, from `bin`, `AdditionalFiles`, `Reports`, and `Resources`.
+  - Empty included folders are materialized with `_nugetutil.keep` only when that folder existed in the original source.
 
 - `-save-nuspec`
   - With `fopack` or `-deployable-package`, saves the generated nuspec to the output folder as `<PackageId>.nuspec`.
